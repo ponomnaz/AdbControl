@@ -1,0 +1,8 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:viewModels="clr-namespace:AdbControl.Tools.Library.ViewModels"
+                    xmlns:views="clr-namespace:AdbControl.Tools.Library.Views">
+    <DataTemplate DataType="{x:Type viewModels:ToolLibraryViewModel}">
+        <views:ToolLibraryView />
+    </DataTemplate>
+</ResourceDictionary>

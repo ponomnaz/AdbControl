@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:viewModels="clr-namespace:AdbControl.Tools.Devices.ViewModels"
+                    xmlns:views="clr-namespace:AdbControl.Tools.Devices.Views">
+    <DataTemplate DataType="{x:Type viewModels:DeviceConnectToolViewModel}">
+        <views:DeviceConnectToolView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:DevicesToolViewModel}">
+        <views:DevicesToolView />
+    </DataTemplate>
+</ResourceDictionary>

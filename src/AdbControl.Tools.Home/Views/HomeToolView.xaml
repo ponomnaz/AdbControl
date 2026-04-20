@@ -1,0 +1,66 @@
+<UserControl x:Class="AdbControl.Tools.Home.Views.HomeToolView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="6">
+            <Border Style="{DynamicResource PanelSurfaceStyle}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource Text.PageTitleStyle}" Text="Главная" />
+                    <TextBlock Margin="0,10,0,0"
+                               Style="{DynamicResource Text.BodyMutedStyle}"
+                               Text="Быстрый вход в основные разделы приложения." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Margin="0,20,0,12"
+                       Style="{DynamicResource Text.SectionTitleStyle}"
+                       Text="Быстрые переходы" />
+            <ItemsControl Margin="0,0,0,20" ItemsSource="{Binding PrimaryLinks}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Width="320"
+                                Margin="0,0,14,14"
+                                Command="{Binding OpenCommand}"
+                                HorizontalContentAlignment="Stretch"
+                                Style="{DynamicResource SecondaryButtonStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="42" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="32"
+                                        Height="32"
+                                        Style="{DynamicResource IconChipStyle}">
+                                    <TextBlock VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"
+                                               Style="{DynamicResource Text.CaptionStyle}"
+                                               Text="{Binding Glyph}"
+                                               FontWeight="SemiBold" />
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Style="{DynamicResource Text.CaptionStyle}"
+                                               Text="{Binding Description}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{DynamicResource PanelInsetStyle}">
+                <TextBlock Style="{DynamicResource Text.BodyMutedStyle}"
+                           Text="{Binding StatusText}" />
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

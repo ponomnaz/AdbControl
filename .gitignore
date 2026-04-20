@@ -1,0 +1,39 @@
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+.fleet/
+
+# Local SDK/tool state
+.dotnet/
+
+# Build outputs
+**/bin/
+**/obj/
+artifacts/
+publish/
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# Temp files
+tmp/
+*.tmp
+*.temp
+*.cache
+*.log
+*.orig
+
+# User-specific files
+*.user
+*.suo
+*.userprefs
+*.slnx
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Repo-local private notes if needed later
+local/private/
+local/tmp/
+*.local.*

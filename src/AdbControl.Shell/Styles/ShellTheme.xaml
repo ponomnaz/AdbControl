@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Colors.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Metrics.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Typography.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Panels.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Buttons.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Inputs.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Lists.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Tabs.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Icons.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

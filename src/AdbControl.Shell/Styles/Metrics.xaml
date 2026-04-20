@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <sys:Double x:Key="FontSize.Caption">12</sys:Double>
+    <sys:Double x:Key="FontSize.Table">13</sys:Double>
+    <sys:Double x:Key="FontSize.Body">14</sys:Double>
+    <sys:Double x:Key="FontSize.Section">16</sys:Double>
+    <sys:Double x:Key="FontSize.Page">20</sys:Double>
+
+    <CornerRadius x:Key="Radius.Control">4</CornerRadius>
+    <CornerRadius x:Key="Radius.Card">6</CornerRadius>
+    <CornerRadius x:Key="Radius.Panel">8</CornerRadius>
+    <CornerRadius x:Key="Radius.Dialog">12</CornerRadius>
+
+    <Thickness x:Key="Padding.Button">12,6</Thickness>
+    <Thickness x:Key="Padding.Input">10,6</Thickness>
+    <Thickness x:Key="Padding.Panel">16</Thickness>
+    <Thickness x:Key="Padding.PanelDense">12</Thickness>
+</ResourceDictionary>

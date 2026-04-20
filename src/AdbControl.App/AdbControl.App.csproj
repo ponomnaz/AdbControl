@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>..\..\assets\icons\icon_adb.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AdbControl.Application\AdbControl.Application.csproj" />
+    <ProjectReference Include="..\AdbControl.Infrastructure\AdbControl.Infrastructure.csproj" />
+    <ProjectReference Include="..\AdbControl.Shell\AdbControl.Shell.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Devices\AdbControl.Tools.Devices.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Home\AdbControl.Tools.Home.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Library\AdbControl.Tools.Library.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\assets\icons\icon_adb.ico" Link="Assets\icon_adb.ico" />
+  </ItemGroup>
+</Project>
