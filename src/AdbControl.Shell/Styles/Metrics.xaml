@@ -12,8 +12,8 @@
     <CornerRadius x:Key="Radius.Panel">8</CornerRadius>
     <CornerRadius x:Key="Radius.Dialog">12</CornerRadius>
 
-    <Thickness x:Key="Padding.Button">12,6</Thickness>
-    <Thickness x:Key="Padding.Input">10,6</Thickness>
-    <Thickness x:Key="Padding.Panel">16</Thickness>
-    <Thickness x:Key="Padding.PanelDense">12</Thickness>
+    <Thickness x:Key="Padding.Button">8,4</Thickness>
+    <Thickness x:Key="Padding.Input">8,4</Thickness>
+    <Thickness x:Key="Padding.Panel">10</Thickness>
+    <Thickness x:Key="Padding.PanelDense">6</Thickness>
 </ResourceDictionary>

@@ -22,7 +22,7 @@
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0"
-                Margin="16"
+                Margin="8"
                 Style="{DynamicResource PanelSurfaceStyle}">
             <Grid>
                 <Grid.RowDefinitions>
@@ -103,7 +103,8 @@
         </Border>
 
         <Border Grid.Column="1"
-                Margin="0,16,16,16"
+                Margin="0,8,8,8"
+                Padding="0"
                 Style="{DynamicResource PanelSurfaceStyle}">
             <ContentPresenter Content="{Binding Workspace.ActiveTab.ContentViewModel}" />
         </Border>

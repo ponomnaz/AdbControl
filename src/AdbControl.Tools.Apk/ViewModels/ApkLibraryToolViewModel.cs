@@ -3,23 +3,27 @@ using System.Collections.Specialized;
 using System.Globalization;
 using AdbControl.Application.Apk;
 using AdbControl.Application.Common;
+using AdbControl.Application.Devices;
+using AdbControl.Core.Devices;
 
 namespace AdbControl.Tools.Apk.ViewModels;
 
 public sealed class ApkLibraryToolViewModel : ObservableObject
 {
     private readonly IApkLibraryService _apkLibrary;
+    private readonly DeviceInventoryState _deviceInventory;
     private readonly List<ApkLibraryEntry> _allEntries = [];
+    private bool _isRefreshingTargetSelection;
     private bool _isBusy;
     private bool _isDropActive;
     private string _statusText = "Перетащи APK сюда или загрузи файл.";
     private ApkSortField _sortField = ApkSortField.Name;
     private bool _isSortDescending;
-    private int _selectedTargetDeviceCount;
 
-    public ApkLibraryToolViewModel(IApkLibraryService apkLibrary)
+    public ApkLibraryToolViewModel(IApkLibraryService apkLibrary, DeviceInventoryState deviceInventory)
     {
         _apkLibrary = apkLibrary;
+        _deviceInventory = deviceInventory;
 
         DeleteSelectedCommand = new RelayCommand(
             () => _ = DeleteSelectedAsync(),
@@ -33,13 +37,20 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         ToggleSortDirectionCommand = new RelayCommand(ToggleSortDirection);
 
         SelectedEntries.CollectionChanged += OnSelectedEntriesChanged;
+        SelectedTargetDevices.CollectionChanged += OnSelectedTargetDevicesChanged;
+        _deviceInventory.KnownDevices.CollectionChanged += OnKnownDevicesChanged;
 
+        RefreshConnectedDevices();
         _ = LoadAsync();
     }
 
     public ObservableCollection<ApkLibraryItemViewModel> Entries { get; } = [];
 
     public ObservableCollection<ApkLibraryItemViewModel> SelectedEntries { get; } = [];
+
+    public ObservableCollection<ApkTargetDeviceViewModel> ConnectedDevices { get; } = [];
+
+    public ObservableCollection<ApkTargetDeviceViewModel> SelectedTargetDevices { get; } = [];
 
     public RelayCommand DeleteSelectedCommand { get; }
     public RelayCommand InstallSelectedCommand { get; }
@@ -78,22 +89,27 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
             ? "Выбран 1 APK"
             : $"Выбрано: {SelectedEntries.Count}";
 
-    public int SelectedTargetDeviceCount
-    {
-        get => _selectedTargetDeviceCount;
-        set
-        {
-            if (SetProperty(ref _selectedTargetDeviceCount, value))
-            {
-                OnPropertyChanged(nameof(HasSelectedTargets));
-                NotifyCommandStateChanged();
-            }
-        }
-    }
+    public bool HasConnectedDevices => ConnectedDevices.Count > 0;
+
+    public string ConnectedDevicesSummary => ConnectedDevices.Count == 0
+        ? "Нет подключенных телевизоров"
+        : ConnectedDevices.Count == 1
+            ? "1 телевизор"
+            : $"Телевизоров: {ConnectedDevices.Count}";
+
+    public int SelectedTargetDeviceCount => SelectedTargetDevices.Count;
 
     public bool HasSelectedTargets => SelectedTargetDeviceCount > 0;
 
+    public string TargetSelectionSummary => SelectedTargetDeviceCount == 0
+        ? "Ничего не выбрано"
+        : SelectedTargetDeviceCount == 1
+            ? "Выбран 1 телевизор"
+            : $"Выбрано: {SelectedTargetDeviceCount}";
+
     public string EmptyStateMessage => "Пока нет загруженных APK.";
+
+    public string EmptyTargetsMessage => "Подключи телевизор, чтобы работать с ним здесь.";
 
     public bool IsSortByName
     {
@@ -320,6 +336,24 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         NotifyCommandStateChanged();
     }
 
+    private void OnSelectedTargetDevicesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_isRefreshingTargetSelection)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(SelectedTargetDeviceCount));
+        OnPropertyChanged(nameof(HasSelectedTargets));
+        OnPropertyChanged(nameof(TargetSelectionSummary));
+        NotifyCommandStateChanged();
+    }
+
+    private void OnKnownDevicesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RefreshConnectedDevices();
+    }
+
     private void NotifyCommandStateChanged()
     {
         DeleteSelectedCommand.NotifyCanExecuteChanged();
@@ -345,6 +379,65 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         _isSortDescending = !_isSortDescending;
         OnPropertyChanged(nameof(SortDirectionGlyph));
         RebuildEntries();
+    }
+
+    private void RefreshConnectedDevices()
+    {
+        var selectedKeys = SelectedTargetDevices
+            .Select(static device => device.SelectionKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        _isRefreshingTargetSelection = true;
+        try
+        {
+            ConnectedDevices.Clear();
+            SelectedTargetDevices.Clear();
+
+            foreach (var device in _deviceInventory.KnownDevices)
+            {
+                var item = new ApkTargetDeviceViewModel(
+                    device,
+                    GetSelectionKey(device),
+                    device.DisplayName,
+                    GetSecondaryText(device));
+
+                ConnectedDevices.Add(item);
+
+                if (selectedKeys.Contains(item.SelectionKey))
+                {
+                    SelectedTargetDevices.Add(item);
+                }
+            }
+        }
+        finally
+        {
+            _isRefreshingTargetSelection = false;
+        }
+
+        OnPropertyChanged(nameof(HasConnectedDevices));
+        OnPropertyChanged(nameof(ConnectedDevicesSummary));
+        OnPropertyChanged(nameof(SelectedTargetDeviceCount));
+        OnPropertyChanged(nameof(HasSelectedTargets));
+        OnPropertyChanged(nameof(TargetSelectionSummary));
+        NotifyCommandStateChanged();
+    }
+
+    private static string GetSelectionKey(TvDeviceProfile device)
+    {
+        return string.IsNullOrWhiteSpace(device.NetworkEndpoint)
+            ? device.Id
+            : device.NetworkEndpoint;
+    }
+
+    private static string GetSecondaryText(TvDeviceProfile device)
+    {
+        if (!string.IsNullOrWhiteSpace(device.NetworkEndpoint) &&
+            !string.Equals(device.DisplayName, device.NetworkEndpoint, StringComparison.OrdinalIgnoreCase))
+        {
+            return device.NetworkEndpoint;
+        }
+
+        return device.PreferredConnection == DeviceConnectionKind.Usb ? "USB" : "Сеть";
     }
 
     private static Dictionary<Guid, int> BuildDuplicateSuffixMap(IReadOnlyList<OrderedApkEntry> entries)
@@ -429,4 +522,27 @@ public enum ApkSortField
     Name,
     Date,
     Size
+}
+
+public sealed class ApkTargetDeviceViewModel : ObservableObject
+{
+    public ApkTargetDeviceViewModel(
+        TvDeviceProfile device,
+        string selectionKey,
+        string title,
+        string secondaryText)
+    {
+        Device = device;
+        SelectionKey = selectionKey;
+        Title = title;
+        SecondaryText = secondaryText;
+    }
+
+    public TvDeviceProfile Device { get; }
+
+    public string SelectionKey { get; }
+
+    public string Title { get; }
+
+    public string SecondaryText { get; }
 }
