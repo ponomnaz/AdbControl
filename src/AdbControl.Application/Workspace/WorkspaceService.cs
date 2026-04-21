@@ -14,6 +14,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly IApkLibraryService _apkLibrary;
+    private readonly IApkDeploymentService _apkDeployment;
     private readonly IDeviceDiscoveryService _deviceDiscovery;
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
@@ -26,6 +27,7 @@ public sealed class WorkspaceService : ObservableObject
         DeviceInventoryState deviceInventory,
         DeviceAliasCatalog deviceAliases,
         IApkLibraryService apkLibrary,
+        IApkDeploymentService apkDeployment,
         IDeviceDiscoveryService deviceDiscovery,
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
@@ -36,6 +38,7 @@ public sealed class WorkspaceService : ObservableObject
         _deviceInventory = deviceInventory;
         _deviceAliases = deviceAliases;
         _apkLibrary = apkLibrary;
+        _apkDeployment = apkDeployment;
         _deviceDiscovery = deviceDiscovery;
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
@@ -101,6 +104,7 @@ public sealed class WorkspaceService : ObservableObject
             _deviceInventory,
             _deviceAliases,
             _apkLibrary,
+            _apkDeployment,
             _deviceDiscovery,
             _adbConnection,
             _deviceActions,

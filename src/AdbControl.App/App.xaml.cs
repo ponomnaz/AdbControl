@@ -41,6 +41,7 @@ public partial class App : System.Windows.Application
         var adbProcessRunner = new AdbProcessRunner(commandTraceJournal);
         var deviceDiscovery = new LocalNetworkAdbDiscoveryService();
         var adbConnection = new AdbConnectionService(adbProcessRunner);
+        IApkDeploymentService apkDeployment = new AdbApkDeploymentService(adbProcessRunner);
         var deviceActions = new AdbDeviceActionService(adbProcessRunner);
         var deviceTop = new AdbTopService(adbProcessRunner);
 
@@ -62,6 +63,7 @@ public partial class App : System.Windows.Application
             deviceInventory,
             deviceAliases,
             apkLibrary,
+            apkDeployment,
             deviceDiscovery,
             adbConnection,
             deviceActions,

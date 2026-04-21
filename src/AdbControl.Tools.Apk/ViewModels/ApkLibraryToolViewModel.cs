@@ -11,6 +11,7 @@ namespace AdbControl.Tools.Apk.ViewModels;
 public sealed class ApkLibraryToolViewModel : ObservableObject
 {
     private readonly IApkLibraryService _apkLibrary;
+    private readonly IApkDeploymentService _apkDeployment;
     private readonly DeviceInventoryState _deviceInventory;
     private readonly List<ApkLibraryEntry> _allEntries = [];
     private bool _isRefreshingTargetSelection;
@@ -20,16 +21,20 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     private ApkSortField _sortField = ApkSortField.Name;
     private bool _isSortDescending;
 
-    public ApkLibraryToolViewModel(IApkLibraryService apkLibrary, DeviceInventoryState deviceInventory)
+    public ApkLibraryToolViewModel(
+        IApkLibraryService apkLibrary,
+        IApkDeploymentService apkDeployment,
+        DeviceInventoryState deviceInventory)
     {
         _apkLibrary = apkLibrary;
+        _apkDeployment = apkDeployment;
         _deviceInventory = deviceInventory;
 
         DeleteSelectedCommand = new RelayCommand(
             () => _ = DeleteSelectedAsync(),
             () => CanDeleteSelected());
         InstallSelectedCommand = new RelayCommand(
-            () => { },
+            () => _ = InstallSelectedAsync(),
             () => CanInstallSelected());
         SortByNameCommand = new RelayCommand(() => SetSortField(ApkSortField.Name));
         SortByDateCommand = new RelayCommand(() => SetSortField(ApkSortField.Date));
@@ -51,6 +56,8 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     public ObservableCollection<ApkTargetDeviceViewModel> ConnectedDevices { get; } = [];
 
     public ObservableCollection<ApkTargetDeviceViewModel> SelectedTargetDevices { get; } = [];
+
+    public ObservableCollection<ApkInstallResultItemViewModel> InstallResults { get; } = [];
 
     public RelayCommand DeleteSelectedCommand { get; }
     public RelayCommand InstallSelectedCommand { get; }
@@ -110,6 +117,24 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     public string EmptyStateMessage => "Пока нет загруженных APK.";
 
     public string EmptyTargetsMessage => "Подключи телевизор, чтобы работать с ним здесь.";
+
+    public string InstallSelectionSummary => SelectedEntries.Count == 0
+        ? "APK не выбраны"
+        : SelectedEntries.Count == 1
+            ? SelectedEntries[0].DisplayName
+            : $"APK: {SelectedEntries.Count}";
+
+    public string InstallTargetSummary => SelectedTargetDeviceCount == 0
+        ? "Телевизоры не выбраны"
+        : SelectedTargetDeviceCount == 1
+            ? SelectedTargetDevices[0].Title
+            : $"Телевизоры: {SelectedTargetDeviceCount}";
+
+    public string InstallResultSummary => InstallResults.Count == 0
+        ? "Установка ещё не запускалась."
+        : $"Операций: {InstallResults.Count}";
+
+    public bool HasInstallResults => InstallResults.Count > 0;
 
     public bool IsSortByName
     {
@@ -245,6 +270,59 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         }
     }
 
+    private async Task InstallSelectedAsync()
+    {
+        var selectedApks = SelectedEntries
+            .Select(entry => entry.Id)
+            .ToHashSet();
+
+        var apks = _allEntries
+            .Where(entry => selectedApks.Contains(entry.Id))
+            .ToArray();
+
+        var devices = SelectedTargetDevices
+            .Select(entry => entry.Device)
+            .ToArray();
+
+        if (apks.Length == 0 || devices.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _isBusy = true;
+            NotifyCommandStateChanged();
+            StatusText = apks.Length == 1 && devices.Length == 1
+                ? "Установка APK..."
+                : $"Установка: {apks.Length} APK на {devices.Length} ТВ";
+
+            var result = await _apkDeployment.InstallAsync(apks, devices);
+
+            InstallResults.Clear();
+            foreach (var operation in result.Operations)
+            {
+                InstallResults.Add(new ApkInstallResultItemViewModel(operation));
+            }
+
+            OnPropertyChanged(nameof(InstallResultSummary));
+            OnPropertyChanged(nameof(HasInstallResults));
+
+            StatusText = result.FailureCount == 0
+                ? $"Установлено: {result.SuccessCount}"
+                : $"Установлено: {result.SuccessCount}, ошибок: {result.FailureCount}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+            NotifyCommandStateChanged();
+        }
+    }
+
     private async Task ReloadEntriesAsync()
     {
         var entries = await _apkLibrary.GetEntriesAsync();
@@ -275,6 +353,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectionSummary));
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(HasEntries));
+        OnPropertyChanged(nameof(InstallSelectionSummary));
     }
 
     private IReadOnlyList<OrderedApkEntry> SortEntries(IReadOnlyList<OrderedApkEntry> entries)
@@ -346,6 +425,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedTargetDeviceCount));
         OnPropertyChanged(nameof(HasSelectedTargets));
         OnPropertyChanged(nameof(TargetSelectionSummary));
+        OnPropertyChanged(nameof(InstallTargetSummary));
         NotifyCommandStateChanged();
     }
 
@@ -419,6 +499,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedTargetDeviceCount));
         OnPropertyChanged(nameof(HasSelectedTargets));
         OnPropertyChanged(nameof(TargetSelectionSummary));
+        OnPropertyChanged(nameof(InstallTargetSummary));
         NotifyCommandStateChanged();
     }
 
@@ -545,4 +626,26 @@ public sealed class ApkTargetDeviceViewModel : ObservableObject
     public string Title { get; }
 
     public string SecondaryText { get; }
+}
+
+public sealed class ApkInstallResultItemViewModel : ObservableObject
+{
+    public ApkInstallResultItemViewModel(ApkInstallOperationResult result)
+    {
+        ApkDisplayName = result.ApkDisplayName;
+        DeviceDisplayName = result.DeviceDisplayName;
+        DeviceTarget = result.DeviceTarget;
+        IsSuccess = result.IsSuccess;
+        Message = result.Message;
+    }
+
+    public string ApkDisplayName { get; }
+
+    public string DeviceDisplayName { get; }
+
+    public string DeviceTarget { get; }
+
+    public bool IsSuccess { get; }
+
+    public string Message { get; }
 }

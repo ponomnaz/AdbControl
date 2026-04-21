@@ -159,6 +159,34 @@
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
             <Setter Property="Padding" Value="{DynamicResource Padding.PanelDense}" />
         </Style>
+
+        <Style x:Key="InstallResultListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource Radius.Card}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="6">
@@ -386,19 +414,116 @@
                             <Style TargetType="TabItem" BasedOn="{StaticResource ApkModeTabItemStyle}" />
                         </TabControl.Resources>
                         <TabItem Header="Установить">
-                            <Border Margin="0,6,0,0"
-                                    MinHeight="188"
-                                    Style="{StaticResource RightPanelDraftSurfaceStyle}">
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock HorizontalAlignment="Center"
+                            <Grid Margin="0,6,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Style="{DynamicResource Text.CaptionStyle}"
+                                               Text="{Binding InstallSelectionSummary}" />
+                                    <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.CaptionStyle}"
-                                               Text="Выбранные APK" />
-                                    <TextBlock HorizontalAlignment="Center"
-                                               Margin="0,6,0,0"
+                                               Text="{Binding InstallTargetSummary}" />
+                                    <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.BodyMutedStyle}"
-                                               Text="Параметры установки и результат появятся здесь." />
+                                               Text="{Binding InstallResultSummary}" />
                                 </StackPanel>
-                            </Border>
+
+                                <Border Grid.Row="1"
+                                        Margin="0,6,0,0"
+                                        MinHeight="188"
+                                        Style="{StaticResource RightPanelDraftSurfaceStyle}">
+                                    <Grid>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Text="Результаты установки появятся здесь.">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasInstallResults}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <ListBox ItemsSource="{Binding InstallResults}"
+                                                 ItemContainerStyle="{StaticResource InstallResultListBoxItemStyle}">
+                                            <ListBox.Style>
+                                                <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasInstallResults}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ListBox.Style>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold"
+                                                                       TextWrapping="Wrap"
+                                                                       Text="{Binding ApkDisplayName}" />
+                                                            <TextBlock Margin="0,4,0,0"
+                                                                       Style="{DynamicResource Text.CaptionStyle}"
+                                                                       Text="{Binding DeviceDisplayName}" />
+                                                            <TextBlock Margin="0,2,0,0"
+                                                                       Style="{DynamicResource Text.CaptionStyle}"
+                                                                       Text="{Binding Message}" />
+                                                        </StackPanel>
+
+                                                        <Border Grid.Column="1"
+                                                                Margin="8,0,0,0"
+                                                                Padding="8,2"
+                                                                VerticalAlignment="Top"
+                                                                CornerRadius="8">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.DangerSoft}" />
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerBorder}" />
+                                                                    <Setter Property="BorderThickness" Value="1" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentSoft}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock FontSize="12"
+                                                                       FontWeight="SemiBold">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
+                                                                        <Setter Property="Text" Value="Ошибка" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.AccentPrimary}" />
+                                                                                <Setter Property="Text" Value="ОК" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                            </Grid>
                         </TabItem>
 
                         <TabItem Header="На ТВ">

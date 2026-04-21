@@ -27,7 +27,7 @@ public sealed class ApkToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "APK",
                 SortOrder: 12),
-            context => new ApkLibraryToolViewModel(context.ApkLibrary, context.DeviceInventory),
+            context => new ApkLibraryToolViewModel(context.ApkLibrary, context.ApkDeployment, context.DeviceInventory),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);
