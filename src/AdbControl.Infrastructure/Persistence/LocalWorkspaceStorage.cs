@@ -17,6 +17,7 @@ public sealed class LocalWorkspaceStorage
         Directory.CreateDirectory(Paths.LayoutDirectory);
         Directory.CreateDirectory(Paths.LogsDirectory);
         Directory.CreateDirectory(Paths.CacheDirectory);
+        Directory.CreateDirectory(Paths.ApksDirectory);
         Directory.CreateDirectory(Paths.SessionsDirectory);
         Directory.CreateDirectory(Paths.ExportsDirectory);
     }

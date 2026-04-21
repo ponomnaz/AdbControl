@@ -7,7 +7,43 @@
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
-    <Grid Margin="6">
+    <UserControl.Resources>
+        <Style x:Key="AliasDisplayTextStyle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="AliasEditorTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DeviceSecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasSecondaryText}" Value="False">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="6"
+          PreviewMouseDown="OnRootPreviewMouseDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -39,6 +75,10 @@
                             Margin="16,0,0,0"
                             Orientation="Horizontal"
                             VerticalAlignment="Bottom">
+                    <Button Margin="0,0,8,0"
+                            Command="{Binding StopCommand}"
+                            Content="Стоп"
+                            Style="{DynamicResource SecondaryButtonStyle}" />
                     <Button Margin="0,0,8,0"
                             Command="{Binding PowerCommand}"
                             Content="Питание"
@@ -77,12 +117,23 @@
                                     <ColumnDefinition Width="120" />
                                     <ColumnDefinition Width="120" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}"
-                                               FontWeight="SemiBold" />
+                                <StackPanel Background="Transparent">
+                                    <StackPanel.InputBindings>
+                                        <MouseBinding MouseAction="LeftDoubleClick"
+                                                      Command="{Binding DataContext.BeginEditAliasCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      CommandParameter="{Binding}" />
+                                    </StackPanel.InputBindings>
+                                    <TextBlock Style="{StaticResource AliasDisplayTextStyle}"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Title}" />
+                                    <TextBox Style="{StaticResource AliasEditorTextBoxStyle}"
+                                             Loaded="OnAliasEditorLoaded"
+                                             LostFocus="OnAliasEditorLostFocus"
+                                             KeyDown="OnAliasEditorKeyDown"
+                                             Text="{Binding AliasDraft, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Margin="0,4,0,0"
-                                               Style="{DynamicResource Text.CaptionStyle}"
-                                               Text="{Binding Endpoint}" />
+                                               Style="{StaticResource DeviceSecondaryTextStyle}"
+                                               Text="{Binding SecondaryText}" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="1"
                                            HorizontalAlignment="Right"

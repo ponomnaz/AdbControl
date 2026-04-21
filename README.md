@@ -28,6 +28,7 @@ dotnet build AdbControl.sln -m:1
 
 - [docs/repo-structure.md](docs/repo-structure.md) — структура репозитория
 - [docs/foundation-roadmap.md](docs/foundation-roadmap.md) — roadmap по наращиванию фич
+- [docs/build-run.md](docs/build-run.md) — команды для сборки и запуска
 - [local/README.md](local/README.md) — локальные проектные инструкции
 - [local/design-system.md](local/design-system.md) — зафиксированная дизайн-система
 - [local/installer.md](local/installer.md) — как подходить к installer/uninstall

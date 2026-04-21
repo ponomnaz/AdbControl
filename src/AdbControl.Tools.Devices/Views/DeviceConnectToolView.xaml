@@ -7,6 +7,19 @@
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
+    <UserControl.Resources>
+        <Style x:Key="DiscoveredDeviceSecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasSecondaryText}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Margin="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -26,9 +39,6 @@
 
                 <StackPanel>
                     <TextBlock Style="{DynamicResource Text.PageTitleStyle}" Text="Подключение" />
-                    <TextBlock Margin="0,8,0,0"
-                               Style="{DynamicResource Text.BodyMutedStyle}"
-                               Text="{Binding StatusText}" />
                     <StackPanel Margin="0,8,0,0"
                                 Orientation="Horizontal">
                         <TextBlock Style="{DynamicResource Text.CaptionStyle}"
@@ -52,12 +62,16 @@
                       Grid.ColumnSpan="2"
                       Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
+                    <TextBlock VerticalAlignment="Center"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="IP" />
+                    <TextBox Grid.Column="1"
                              MinWidth="260"
                              Margin="8,0,8,0"
                              Style="{DynamicResource TextBoxInputStyle}"
@@ -67,17 +81,17 @@
                                         Command="{Binding ConnectManualCommand}" />
                         </TextBox.InputBindings>
                     </TextBox>
-                    <Button Grid.Column="1"
+                    <Button Grid.Column="2"
                             Margin="0,0,8,0"
                             Command="{Binding ConnectManualCommand}"
                             Content="Подключить"
                             Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Grid.Column="2"
+                    <Button Grid.Column="3"
                             Margin="0,0,8,0"
                             Command="{Binding DisconnectSelectedCommand}"
                             Content="Отключить"
-                            Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Grid.Column="3"
+                            Style="{DynamicResource DangerButtonStyle}" />
+                    <Button Grid.Column="4"
                             Command="{Binding ConnectSelectedCommand}"
                             Content="Подключить выбранные"
                             Style="{DynamicResource PrimaryButtonStyle}" />
@@ -111,9 +125,16 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="140" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock VerticalAlignment="Center"
-                                           FontWeight="SemiBold"
-                                           Text="{Binding Endpoint}" />
+                                <StackPanel>
+                                    <TextBlock VerticalAlignment="Center"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Title}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Style="{StaticResource DiscoveredDeviceSecondaryTextStyle}"
+                                               Text="{Binding SecondaryText}" />
+                                </StackPanel>
                                 <TextBlock Grid.Column="1"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"

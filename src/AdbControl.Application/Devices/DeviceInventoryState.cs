@@ -90,6 +90,42 @@ public sealed class DeviceInventoryState : ObservableObject
         RemoveMatchingDevices(SelectedDevices, endpointSet);
     }
 
+    public void RemoveDisconnectedNetworkDevices(IEnumerable<string> endpoints)
+    {
+        var endpointSet = endpoints
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = KnownDevices.Count - 1; index >= 0; index--)
+        {
+            var device = KnownDevices[index];
+            if (device.PreferredConnection != DeviceConnectionKind.Network || string.IsNullOrWhiteSpace(device.NetworkEndpoint))
+            {
+                continue;
+            }
+
+            if (!endpointSet.Contains(device.NetworkEndpoint))
+            {
+                KnownDevices.RemoveAt(index);
+            }
+        }
+
+        for (var index = SelectedDevices.Count - 1; index >= 0; index--)
+        {
+            var device = SelectedDevices[index];
+            if (device.PreferredConnection != DeviceConnectionKind.Network || string.IsNullOrWhiteSpace(device.NetworkEndpoint))
+            {
+                continue;
+            }
+
+            if (!endpointSet.Contains(device.NetworkEndpoint))
+            {
+                SelectedDevices.RemoveAt(index);
+            }
+        }
+    }
+
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasKnownDevices));

@@ -10,9 +10,12 @@
     <ProjectReference Include="..\AdbControl.Application\AdbControl.Application.csproj" />
     <ProjectReference Include="..\AdbControl.Infrastructure\AdbControl.Infrastructure.csproj" />
     <ProjectReference Include="..\AdbControl.Shell\AdbControl.Shell.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.CommandLog\AdbControl.Tools.CommandLog.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Apk\AdbControl.Tools.Apk.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Devices\AdbControl.Tools.Devices.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Home\AdbControl.Tools.Home.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Library\AdbControl.Tools.Library.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Top\AdbControl.Tools.Top.csproj" />
   </ItemGroup>
 
   <ItemGroup>

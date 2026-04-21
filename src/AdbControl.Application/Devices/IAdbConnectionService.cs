@@ -5,4 +5,6 @@ public interface IAdbConnectionService
     Task<AdbConnectResult> ConnectAsync(string endpoint, CancellationToken cancellationToken = default);
 
     Task<AdbDisconnectResult> DisconnectAsync(string endpoint, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> GetConnectedEndpointsAsync(CancellationToken cancellationToken = default);
 }

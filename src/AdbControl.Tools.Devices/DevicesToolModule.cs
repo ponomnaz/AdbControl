@@ -27,7 +27,7 @@ public sealed class DevicesToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "TV",
                 SortOrder: 0),
-            context => new DevicesToolViewModel(context.DeviceInventory, context.DeviceActions),
+            context => new DevicesToolViewModel(context.DeviceInventory, context.DeviceActions, context.DeviceAliases),
             ShowInNavigation: true,
             OpenOnStartup: true,
             ReuseExistingTab: true);
@@ -43,7 +43,7 @@ public sealed class DevicesToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "+",
                 SortOrder: 10),
-            context => new DeviceConnectToolViewModel(context.DeviceInventory, context.DeviceDiscovery, context.AdbConnection),
+            context => new DeviceConnectToolViewModel(context.DeviceInventory, context.DeviceDiscovery, context.AdbConnection, context.DeviceAliases),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);

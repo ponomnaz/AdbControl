@@ -1,14 +1,19 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using AdbControl.Application.Devices;
 
 namespace AdbControl.Infrastructure.Devices;
 
 public sealed class AdbConnectionService : IAdbConnectionService
 {
+    private readonly AdbProcessRunner _adbProcessRunner;
+
+    public AdbConnectionService(AdbProcessRunner adbProcessRunner)
+    {
+        _adbProcessRunner = adbProcessRunner;
+    }
+
     public async Task<AdbConnectResult> ConnectAsync(string endpoint, CancellationToken cancellationToken = default)
     {
-        var connectResult = await RunAdbCommandAsync($"connect {endpoint}", cancellationToken);
+        var connectResult = await _adbProcessRunner.RunAsync($"connect {endpoint}", cancellationToken);
         if (!connectResult.Started)
         {
             return new AdbConnectResult(endpoint, false, "adb.exe не найден. Добавь platform-tools в PATH.");
@@ -20,7 +25,7 @@ public sealed class AdbConnectionService : IAdbConnectionService
             return new AdbConnectResult(endpoint, false, TranslateFailureMessage(rawMessage));
         }
 
-        var verifyResult = await RunAdbCommandAsync($"-s {endpoint} get-state", cancellationToken);
+        var verifyResult = await _adbProcessRunner.RunAsync($"-s {endpoint} get-state", cancellationToken);
         if (!verifyResult.Started)
         {
             return new AdbConnectResult(endpoint, false, "adb.exe не найден. Добавь platform-tools в PATH.");
@@ -36,14 +41,17 @@ public sealed class AdbConnectionService : IAdbConnectionService
 
     public async Task<AdbDisconnectResult> DisconnectAsync(string endpoint, CancellationToken cancellationToken = default)
     {
-        var disconnectResult = await RunAdbCommandAsync($"disconnect {endpoint}", cancellationToken);
+        var disconnectResult = await _adbProcessRunner.RunAsync($"disconnect {endpoint}", cancellationToken);
         if (!disconnectResult.Started)
         {
             return new AdbDisconnectResult(endpoint, false, "adb.exe не найден. Добавь platform-tools в PATH.");
         }
 
         var rawMessage = BuildRawMessage(disconnectResult.Stdout, disconnectResult.Stderr);
-        var verifyResult = await RunAdbCommandAsync($"-s {endpoint} get-state", cancellationToken);
+        var verifyResult = await _adbProcessRunner.RunAsync(
+            $"-s {endpoint} get-state",
+            cancellationToken,
+            result => result.ExitCode != 0 && !IsExpectedMissingDevice(result, endpoint));
         if (!verifyResult.Started)
         {
             return new AdbDisconnectResult(endpoint, false, "adb.exe не найден. Добавь platform-tools в PATH.");
@@ -55,6 +63,21 @@ public sealed class AdbConnectionService : IAdbConnectionService
         return isDisconnected
             ? new AdbDisconnectResult(endpoint, true, TranslateDisconnectSuccessMessage(rawMessage))
             : new AdbDisconnectResult(endpoint, false, "Не удалось отключить устройство.");
+    }
+
+    public async Task<IReadOnlyList<string>> GetConnectedEndpointsAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await _adbProcessRunner.RunAsync(
+            "devices",
+            cancellationToken,
+            recordInJournal: false);
+
+        if (!result.Started || result.ExitCode != 0)
+        {
+            return [];
+        }
+
+        return ParseConnectedEndpoints(result.Stdout);
     }
 
     private static bool IndicatesConnected(string rawMessage)
@@ -120,44 +143,80 @@ public sealed class AdbConnectionService : IAdbConnectionService
         return "Отключено.";
     }
 
-    private static async Task<AdbProcessResult> RunAdbCommandAsync(string arguments, CancellationToken cancellationToken)
+    private static bool IsExpectedMissingDevice(AdbProcessResult result, string endpoint)
     {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "adb",
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
-        try
-        {
-            process.Start();
-        }
-        catch (Win32Exception)
-        {
-            return AdbProcessResult.NotStarted;
-        }
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        return new AdbProcessResult(
-            true,
-            process.ExitCode,
-            await stdoutTask,
-            await stderrTask);
+        var rawMessage = BuildRawMessage(result.Stdout, result.Stderr);
+        return rawMessage.Contains($"device '{endpoint}' not found", StringComparison.OrdinalIgnoreCase) ||
+               rawMessage.Contains("device not found", StringComparison.OrdinalIgnoreCase);
     }
-}
 
-internal sealed record AdbProcessResult(bool Started, int ExitCode, string Stdout, string Stderr)
-{
-    public static AdbProcessResult NotStarted { get; } = new(false, -1, string.Empty, string.Empty);
+    private static IReadOnlyList<string> ParseConnectedEndpoints(string stdout)
+    {
+        var endpoints = new List<string>();
+
+        foreach (var rawLine in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line) ||
+                line.StartsWith("List of devices attached", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var parts = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !string.Equals(parts[1], "device", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var endpoint = parts[0].Trim();
+            if (IsIpv4Endpoint(endpoint))
+            {
+                endpoints.Add(endpoint);
+            }
+        }
+
+        return endpoints
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsIpv4Endpoint(string value)
+    {
+        var separatorIndex = value.LastIndexOf(':');
+        if (separatorIndex <= 0 || separatorIndex == value.Length - 1)
+        {
+            return false;
+        }
+
+        var host = value[..separatorIndex];
+        var port = value[(separatorIndex + 1)..];
+
+        return IsValidIpv4(host) &&
+               int.TryParse(port, out var parsedPort) &&
+               parsedPort is > 0 and <= 65535;
+    }
+
+    private static bool IsValidIpv4(string value)
+    {
+        var octets = value.Split('.', StringSplitOptions.None);
+        if (octets.Length != 4)
+        {
+            return false;
+        }
+
+        foreach (var octet in octets)
+        {
+            if (octet.Length == 0 ||
+                octet.Length > 3 ||
+                !int.TryParse(octet, out var part) ||
+                part is < 0 or > 255)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

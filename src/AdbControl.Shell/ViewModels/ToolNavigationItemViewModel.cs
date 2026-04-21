@@ -6,6 +6,7 @@ namespace AdbControl.Shell.ViewModels;
 public sealed class ToolNavigationItemViewModel : ObservableObject
 {
     private bool _isActive;
+    private int _attentionCount;
 
     public required string Id { get; init; }
 
@@ -22,4 +23,20 @@ public sealed class ToolNavigationItemViewModel : ObservableObject
         get => _isActive;
         set => SetProperty(ref _isActive, value);
     }
+
+    public int AttentionCount
+    {
+        get => _attentionCount;
+        set
+        {
+            if (!SetProperty(ref _attentionCount, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(HasAttention));
+        }
+    }
+
+    public bool HasAttention => AttentionCount > 0;
 }

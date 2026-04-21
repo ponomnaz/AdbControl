@@ -12,6 +12,7 @@ public sealed class AppDataPaths
         LayoutDirectory = Path.Combine(rootDirectory, "layout");
         LogsDirectory = Path.Combine(rootDirectory, "logs");
         CacheDirectory = Path.Combine(rootDirectory, "cache");
+        ApksDirectory = Path.Combine(rootDirectory, "apks");
         SessionsDirectory = Path.Combine(rootDirectory, "sessions");
         ExportsDirectory = Path.Combine(rootDirectory, "exports");
     }
@@ -27,6 +28,8 @@ public sealed class AppDataPaths
     public string LogsDirectory { get; }
 
     public string CacheDirectory { get; }
+
+    public string ApksDirectory { get; }
 
     public string SessionsDirectory { get; }
 

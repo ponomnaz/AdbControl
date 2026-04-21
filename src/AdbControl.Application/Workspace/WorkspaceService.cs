@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using AdbControl.Application.Apk;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
+using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
 
 namespace AdbControl.Application.Workspace;
@@ -9,23 +12,35 @@ public sealed class WorkspaceService : ObservableObject
 {
     private readonly ToolCatalog _toolCatalog;
     private readonly DeviceInventoryState _deviceInventory;
+    private readonly DeviceAliasCatalog _deviceAliases;
+    private readonly IApkLibraryService _apkLibrary;
     private readonly IDeviceDiscoveryService _deviceDiscovery;
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
+    private readonly IDeviceTopService _deviceTop;
+    private readonly CommandTraceJournal _commandTraceJournal;
     private WorkspaceTab? _activeTab;
 
     public WorkspaceService(
         ToolCatalog toolCatalog,
         DeviceInventoryState deviceInventory,
+        DeviceAliasCatalog deviceAliases,
+        IApkLibraryService apkLibrary,
         IDeviceDiscoveryService deviceDiscovery,
         IAdbConnectionService adbConnection,
-        IDeviceActionService deviceActions)
+        IDeviceActionService deviceActions,
+        IDeviceTopService deviceTop,
+        CommandTraceJournal commandTraceJournal)
     {
         _toolCatalog = toolCatalog;
         _deviceInventory = deviceInventory;
+        _deviceAliases = deviceAliases;
+        _apkLibrary = apkLibrary;
         _deviceDiscovery = deviceDiscovery;
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
+        _deviceTop = deviceTop;
+        _commandTraceJournal = commandTraceJournal;
     }
 
     public ObservableCollection<WorkspaceTab> Tabs { get; } = [];
@@ -81,7 +96,17 @@ public sealed class WorkspaceService : ObservableObject
             }
         }
 
-        var context = new ToolActivationContext(_toolCatalog, _deviceInventory, _deviceDiscovery, _adbConnection, _deviceActions, OpenTool);
+        var context = new ToolActivationContext(
+            _toolCatalog,
+            _deviceInventory,
+            _deviceAliases,
+            _apkLibrary,
+            _deviceDiscovery,
+            _adbConnection,
+            _deviceActions,
+            _deviceTop,
+            _commandTraceJournal,
+            OpenTool);
         var contentViewModel = registration.CreateContentViewModel(context);
         var tab = new WorkspaceTab(registration, contentViewModel);
         Tabs.Add(tab);
@@ -102,6 +127,11 @@ public sealed class WorkspaceService : ObservableObject
         }
 
         Tabs.RemoveAt(index);
+
+        if (tab.ContentViewModel is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
 
         if (ReferenceEquals(ActiveTab, tab))
         {

@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
+using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Tools;
 using AdbControl.Application.Workspace;
 
@@ -8,13 +9,20 @@ namespace AdbControl.Shell.ViewModels;
 
 public sealed class ShellViewModel : ObservableObject
 {
+    private const string CommandLogToolId = "command-log";
+    private readonly CommandTraceJournal _commandTraceJournal;
     private readonly DeviceInventoryState _deviceInventory;
     private readonly WorkspaceService _workspace;
 
-    public ShellViewModel(ToolCatalog toolCatalog, WorkspaceService workspace, DeviceInventoryState deviceInventory)
+    public ShellViewModel(
+        ToolCatalog toolCatalog,
+        WorkspaceService workspace,
+        DeviceInventoryState deviceInventory,
+        CommandTraceJournal commandTraceJournal)
     {
         _workspace = workspace;
         _deviceInventory = deviceInventory;
+        _commandTraceJournal = commandTraceJournal;
 
         NavigationItems = toolCatalog.NavigationTools
             .Select(x => new ToolNavigationItemViewModel
@@ -38,8 +46,10 @@ public sealed class ShellViewModel : ObservableObject
         _workspace.Tabs.CollectionChanged += OnTabsChanged;
         _deviceInventory.KnownDevices.CollectionChanged += OnDevicesChanged;
         _deviceInventory.SelectedDevices.CollectionChanged += OnDevicesChanged;
+        _commandTraceJournal.PropertyChanged += OnCommandTraceChanged;
 
         UpdateNavigationState();
+        UpdateAttentionState();
     }
 
     public IReadOnlyList<ToolNavigationItemViewModel> NavigationItems { get; }
@@ -79,12 +89,37 @@ public sealed class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(DeviceSummary));
     }
 
+    private void OnCommandTraceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(CommandTraceJournal.UnreadErrorCount) or nameof(CommandTraceJournal.HasUnreadErrors))
+        {
+            UpdateAttentionState();
+        }
+    }
+
     private void UpdateNavigationState()
     {
         var activeToolId = _workspace.ActiveTab?.Registration.Tool.Id;
+        if (string.Equals(activeToolId, CommandLogToolId, StringComparison.OrdinalIgnoreCase))
+        {
+            _commandTraceJournal.MarkErrorsAsViewed();
+        }
+
         foreach (var navigationItem in NavigationItems)
         {
             navigationItem.IsActive = string.Equals(navigationItem.Id, activeToolId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        UpdateAttentionState();
+    }
+
+    private void UpdateAttentionState()
+    {
+        foreach (var navigationItem in NavigationItems)
+        {
+            navigationItem.AttentionCount = string.Equals(navigationItem.Id, CommandLogToolId, StringComparison.OrdinalIgnoreCase)
+                ? _commandTraceJournal.UnreadErrorCount
+                : 0;
         }
     }
 }
