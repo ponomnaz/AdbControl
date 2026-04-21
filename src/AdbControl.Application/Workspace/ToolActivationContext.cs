@@ -12,6 +12,7 @@ public sealed record ToolActivationContext(
     DeviceAliasCatalog DeviceAliases,
     IApkLibraryService ApkLibrary,
     IApkDeploymentService ApkDeployment,
+    IApkDevicePackageService ApkDevicePackages,
     IDeviceDiscoveryService DeviceDiscovery,
     IAdbConnectionService AdbConnection,
     IDeviceActionService DeviceActions,

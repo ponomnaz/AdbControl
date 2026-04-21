@@ -12,22 +12,30 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
 {
     private readonly IApkLibraryService _apkLibrary;
     private readonly IApkDeploymentService _apkDeployment;
+    private readonly IApkDevicePackageService _apkDevicePackages;
     private readonly DeviceInventoryState _deviceInventory;
     private readonly List<ApkLibraryEntry> _allEntries = [];
+    private readonly List<ApkInstalledPackageItemViewModel> _allInstalledPackages = [];
     private bool _isRefreshingTargetSelection;
     private bool _isBusy;
     private bool _isDropActive;
     private string _statusText = "Перетащи APK сюда или загрузи файл.";
+    private string _packagesStatusText = "Выбери телевизоры и нажми «Обновить».";
+    private string _packageSearchText = string.Empty;
+    private bool _hasLoadedInstalledPackages;
+    private bool _packageLoadFailedOnly;
     private ApkSortField _sortField = ApkSortField.Name;
     private bool _isSortDescending;
 
     public ApkLibraryToolViewModel(
         IApkLibraryService apkLibrary,
         IApkDeploymentService apkDeployment,
+        IApkDevicePackageService apkDevicePackages,
         DeviceInventoryState deviceInventory)
     {
         _apkLibrary = apkLibrary;
         _apkDeployment = apkDeployment;
+        _apkDevicePackages = apkDevicePackages;
         _deviceInventory = deviceInventory;
 
         DeleteSelectedCommand = new RelayCommand(
@@ -36,6 +44,12 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         InstallSelectedCommand = new RelayCommand(
             () => _ = InstallSelectedAsync(),
             () => CanInstallSelected());
+        RefreshPackagesCommand = new RelayCommand(
+            () => _ = RefreshPackagesAsync(),
+            () => CanRefreshPackages());
+        UninstallSelectedPackagesCommand = new RelayCommand(
+            () => _ = UninstallSelectedPackagesAsync(),
+            () => CanUninstallSelectedPackages());
         SortByNameCommand = new RelayCommand(() => SetSortField(ApkSortField.Name));
         SortByDateCommand = new RelayCommand(() => SetSortField(ApkSortField.Date));
         SortBySizeCommand = new RelayCommand(() => SetSortField(ApkSortField.Size));
@@ -43,6 +57,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
 
         SelectedEntries.CollectionChanged += OnSelectedEntriesChanged;
         SelectedTargetDevices.CollectionChanged += OnSelectedTargetDevicesChanged;
+        SelectedInstalledPackages.CollectionChanged += OnSelectedInstalledPackagesChanged;
         _deviceInventory.KnownDevices.CollectionChanged += OnKnownDevicesChanged;
 
         RefreshConnectedDevices();
@@ -59,8 +74,14 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
 
     public ObservableCollection<ApkInstallResultItemViewModel> InstallResults { get; } = [];
 
+    public ObservableCollection<ApkInstalledPackageItemViewModel> InstalledPackages { get; } = [];
+
+    public ObservableCollection<ApkInstalledPackageItemViewModel> SelectedInstalledPackages { get; } = [];
+
     public RelayCommand DeleteSelectedCommand { get; }
     public RelayCommand InstallSelectedCommand { get; }
+    public RelayCommand RefreshPackagesCommand { get; }
+    public RelayCommand UninstallSelectedPackagesCommand { get; }
     public RelayCommand SortByNameCommand { get; }
     public RelayCommand SortByDateCommand { get; }
     public RelayCommand SortBySizeCommand { get; }
@@ -79,6 +100,32 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     }
 
     public bool HasStatusText => !string.IsNullOrWhiteSpace(StatusText);
+
+    public string PackagesStatusText
+    {
+        get => _packagesStatusText;
+        private set
+        {
+            if (SetProperty(ref _packagesStatusText, value))
+            {
+                OnPropertyChanged(nameof(HasPackagesStatusText));
+            }
+        }
+    }
+
+    public bool HasPackagesStatusText => !string.IsNullOrWhiteSpace(PackagesStatusText);
+
+    public string PackageSearchText
+    {
+        get => _packageSearchText;
+        set
+        {
+            if (SetProperty(ref _packageSearchText, value))
+            {
+                RebuildInstalledPackages();
+            }
+        }
+    }
 
     public bool IsDropActive
     {
@@ -135,6 +182,30 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         : $"Операций: {InstallResults.Count}";
 
     public bool HasInstallResults => InstallResults.Count > 0;
+
+    public bool HasInstalledPackages => InstalledPackages.Count > 0;
+
+    public string InstalledPackagesSummary => !_hasLoadedInstalledPackages || _packageLoadFailedOnly
+        ? string.Empty
+        : InstalledPackages.Count == 0
+            ? "Пакеты не найдены"
+            : InstalledPackages.Count == 1
+                ? "1 пакет"
+                : $"Пакетов: {InstalledPackages.Count}";
+
+    public string InstalledPackagesEmptyMessage => SelectedTargetDeviceCount == 0
+        ? "Выбери телевизоры."
+        : !_hasLoadedInstalledPackages
+            ? "Нажми «Обновить», чтобы получить пакеты."
+            : _packageLoadFailedOnly
+                ? "Не удалось получить пакеты."
+                : "Пакеты не найдены.";
+
+    public string InstalledPackageSelectionSummary => SelectedInstalledPackages.Count == 0
+        ? "Пакеты не выбраны"
+        : SelectedInstalledPackages.Count == 1
+            ? SelectedInstalledPackages[0].PackageName
+            : $"Выбрано пакетов: {SelectedInstalledPackages.Count}";
 
     public bool IsSortByName
     {
@@ -311,10 +382,114 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
             StatusText = result.FailureCount == 0
                 ? $"Установлено: {result.SuccessCount}"
                 : $"Установлено: {result.SuccessCount}, ошибок: {result.FailureCount}";
+
+            ResetInstalledPackages("Список пакетов устарел. Нажми «Обновить».");
         }
         catch (Exception ex)
         {
             StatusText = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+            NotifyCommandStateChanged();
+        }
+    }
+
+    private async Task RefreshPackagesAsync()
+    {
+        var devices = SelectedTargetDevices
+            .Select(static entry => entry.Device)
+            .ToArray();
+
+        if (devices.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _isBusy = true;
+            NotifyCommandStateChanged();
+            PackagesStatusText = devices.Length == 1
+                ? "Загрузка пакетов..."
+                : $"Загрузка пакетов: {devices.Length} ТВ";
+
+            SelectedInstalledPackages.Clear();
+            var result = await _apkDevicePackages.GetInstalledPackagesAsync(devices);
+            ApplyInstalledPackages(result);
+
+            PackagesStatusText = result.FailureCount == 0
+                ? result.SuccessCount == 1
+                    ? "Пакеты обновлены."
+                    : $"Пакеты обновлены: {result.SuccessCount} ТВ"
+                : $"Пакеты обновлены: {result.SuccessCount}, ошибок: {result.FailureCount}";
+        }
+        catch (Exception ex)
+        {
+            ResetInstalledPackages(ex.Message);
+        }
+        finally
+        {
+            _isBusy = false;
+            NotifyCommandStateChanged();
+        }
+    }
+
+    private async Task UninstallSelectedPackagesAsync()
+    {
+        var selectedPackages = SelectedInstalledPackages
+            .DistinctBy(static entry => entry.PackageName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (selectedPackages.Length == 0)
+        {
+            return;
+        }
+
+        var selectedDevices = SelectedTargetDevices
+            .ToDictionary(static entry => entry.SelectionKey, static entry => entry.Device, StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            _isBusy = true;
+            NotifyCommandStateChanged();
+            PackagesStatusText = selectedPackages.Length == 1
+                ? "Удаление пакета..."
+                : $"Удаление пакетов: {selectedPackages.Length}";
+
+            var operations = new List<PackageUninstallOperationResult>();
+
+            foreach (var package in selectedPackages)
+            {
+                var targetDevices = package.InstalledSelectionKeys
+                    .Where(selectedDevices.ContainsKey)
+                    .Select(selectionKey => selectedDevices[selectionKey])
+                    .ToArray();
+
+                if (targetDevices.Length == 0)
+                {
+                    continue;
+                }
+
+                var result = await _apkDevicePackages.UninstallAsync(package.PackageName, targetDevices);
+                operations.AddRange(result.Operations);
+            }
+
+            var successCount = operations.Count(static operation => operation.IsSuccess);
+            var failureCount = operations.Count - successCount;
+
+            await RefreshPackagesCoreAsync(selectedDevices.Values.ToArray());
+
+            PackagesStatusText = failureCount == 0
+                ? successCount == 1
+                    ? "Пакет удален."
+                    : $"Удалено: {successCount}"
+                : $"Удалено: {successCount}, ошибок: {failureCount}";
+        }
+        catch (Exception ex)
+        {
+            PackagesStatusText = ex.Message;
         }
         finally
         {
@@ -329,6 +504,13 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         _allEntries.Clear();
         _allEntries.AddRange(entries);
         RebuildEntries();
+    }
+
+    private async Task RefreshPackagesCoreAsync(IReadOnlyList<TvDeviceProfile> devices)
+    {
+        SelectedInstalledPackages.Clear();
+        var result = await _apkDevicePackages.GetInstalledPackagesAsync(devices);
+        ApplyInstalledPackages(result);
     }
 
     private void RebuildEntries()
@@ -354,6 +536,87 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(HasEntries));
         OnPropertyChanged(nameof(InstallSelectionSummary));
+    }
+
+    private void ApplyInstalledPackages(DevicePackagesBatchResult result)
+    {
+        var selectedCount = SelectedTargetDeviceCount;
+        var deviceTitles = SelectedTargetDevices.ToDictionary(
+            static device => device.SelectionKey,
+            static device => device.Title,
+            StringComparer.OrdinalIgnoreCase);
+
+        var packageMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var snapshot in result.Devices.Where(static device => device.IsSuccess))
+        {
+            foreach (var packageName in snapshot.Packages)
+            {
+                if (!packageMap.TryGetValue(packageName, out var keys))
+                {
+                    keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    packageMap[packageName] = keys;
+                }
+
+                keys.Add(snapshot.DeviceTarget);
+            }
+        }
+
+        _allInstalledPackages.Clear();
+        _packageLoadFailedOnly = result.SuccessCount == 0 && result.FailureCount > 0;
+        foreach (var packageEntry in packageMap.OrderBy(static entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var installedKeys = packageEntry.Value.ToArray();
+            var installedTitles = installedKeys
+                .Select(key => deviceTitles.TryGetValue(key, out var title) ? title : key)
+                .ToArray();
+
+            _allInstalledPackages.Add(new ApkInstalledPackageItemViewModel(
+                packageEntry.Key,
+                installedKeys,
+                installedTitles,
+                selectedCount));
+        }
+
+        _hasLoadedInstalledPackages = true;
+        RebuildInstalledPackages();
+    }
+
+    private void RebuildInstalledPackages()
+    {
+        var search = PackageSearchText?.Trim();
+        var filtered = string.IsNullOrWhiteSpace(search)
+            ? _allInstalledPackages
+            : _allInstalledPackages
+                .Where(item => item.PackageName.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        SelectedInstalledPackages.Clear();
+        InstalledPackages.Clear();
+
+        foreach (var item in filtered)
+        {
+            InstalledPackages.Add(item);
+        }
+
+        OnPropertyChanged(nameof(HasInstalledPackages));
+        OnPropertyChanged(nameof(InstalledPackagesSummary));
+        OnPropertyChanged(nameof(InstalledPackagesEmptyMessage));
+        OnPropertyChanged(nameof(InstalledPackageSelectionSummary));
+    }
+
+    private void ResetInstalledPackages(string statusText)
+    {
+        _allInstalledPackages.Clear();
+        _hasLoadedInstalledPackages = false;
+        _packageLoadFailedOnly = false;
+        SelectedInstalledPackages.Clear();
+        InstalledPackages.Clear();
+        PackagesStatusText = statusText;
+        OnPropertyChanged(nameof(HasInstalledPackages));
+        OnPropertyChanged(nameof(InstalledPackagesSummary));
+        OnPropertyChanged(nameof(InstalledPackagesEmptyMessage));
+        OnPropertyChanged(nameof(InstalledPackageSelectionSummary));
     }
 
     private IReadOnlyList<OrderedApkEntry> SortEntries(IReadOnlyList<OrderedApkEntry> entries)
@@ -409,9 +672,20 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         return !_isBusy && SelectedEntries.Count > 0 && SelectedTargetDeviceCount > 0;
     }
 
+    private bool CanRefreshPackages()
+    {
+        return !_isBusy && SelectedTargetDeviceCount > 0;
+    }
+
+    private bool CanUninstallSelectedPackages()
+    {
+        return !_isBusy && SelectedTargetDeviceCount > 0 && SelectedInstalledPackages.Count > 0;
+    }
+
     private void OnSelectedEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(InstallSelectionSummary));
         NotifyCommandStateChanged();
     }
 
@@ -426,6 +700,15 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedTargets));
         OnPropertyChanged(nameof(TargetSelectionSummary));
         OnPropertyChanged(nameof(InstallTargetSummary));
+        ResetInstalledPackages(SelectedTargetDeviceCount == 0
+            ? "Выбери телевизоры и нажми «Обновить»."
+            : "Нажми «Обновить», чтобы получить пакеты.");
+        NotifyCommandStateChanged();
+    }
+
+    private void OnSelectedInstalledPackagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(InstalledPackageSelectionSummary));
         NotifyCommandStateChanged();
     }
 
@@ -438,6 +721,8 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     {
         DeleteSelectedCommand.NotifyCanExecuteChanged();
         InstallSelectedCommand.NotifyCanExecuteChanged();
+        RefreshPackagesCommand.NotifyCanExecuteChanged();
+        UninstallSelectedPackagesCommand.NotifyCanExecuteChanged();
     }
 
     private void SetSortField(ApkSortField field)
@@ -500,6 +785,9 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedTargets));
         OnPropertyChanged(nameof(TargetSelectionSummary));
         OnPropertyChanged(nameof(InstallTargetSummary));
+        ResetInstalledPackages(SelectedTargetDeviceCount == 0
+            ? "Выбери телевизоры и нажми «Обновить»."
+            : "Нажми «Обновить», чтобы получить пакеты.");
         NotifyCommandStateChanged();
     }
 
@@ -648,4 +936,46 @@ public sealed class ApkInstallResultItemViewModel : ObservableObject
     public bool IsSuccess { get; }
 
     public string Message { get; }
+}
+
+public sealed class ApkInstalledPackageItemViewModel : ObservableObject
+{
+    public ApkInstalledPackageItemViewModel(
+        string packageName,
+        IReadOnlyList<string> installedSelectionKeys,
+        IReadOnlyList<string> installedDeviceTitles,
+        int selectedDeviceCount)
+    {
+        PackageName = packageName;
+        InstalledSelectionKeys = installedSelectionKeys;
+        InstalledDeviceCount = installedSelectionKeys.Count;
+        SelectedDeviceCount = selectedDeviceCount;
+        PresenceText = selectedDeviceCount <= 1
+            ? "Установлено"
+            : $"{InstalledDeviceCount}/{selectedDeviceCount}";
+        MetaText = BuildMetaText(installedDeviceTitles);
+    }
+
+    public string PackageName { get; }
+
+    public IReadOnlyList<string> InstalledSelectionKeys { get; }
+
+    public int InstalledDeviceCount { get; }
+
+    public int SelectedDeviceCount { get; }
+
+    public string PresenceText { get; }
+
+    public string MetaText { get; }
+
+    private static string BuildMetaText(IReadOnlyList<string> installedDeviceTitles)
+    {
+        return installedDeviceTitles.Count switch
+        {
+            0 => string.Empty,
+            1 => installedDeviceTitles[0],
+            2 => $"{installedDeviceTitles[0]}, {installedDeviceTitles[1]}",
+            _ => $"{installedDeviceTitles[0]}, {installedDeviceTitles[1]} и ещё {installedDeviceTitles.Count - 2}"
+        };
+    }
 }

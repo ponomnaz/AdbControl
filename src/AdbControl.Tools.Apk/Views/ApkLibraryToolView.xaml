@@ -187,6 +187,14 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="PackagePresenceBadgeStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentSoft}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="6">
@@ -527,19 +535,123 @@
                         </TabItem>
 
                         <TabItem Header="На ТВ">
-                            <Border Margin="0,6,0,0"
-                                    MinHeight="188"
-                                    Style="{StaticResource RightPanelDraftSurfaceStyle}">
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock HorizontalAlignment="Center"
+                            <Grid Margin="0,6,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBox Grid.Column="0"
+                                             Style="{DynamicResource TextBoxInputStyle}"
+                                             Text="{Binding PackageSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Поиск по package name" />
+
+                                    <Button Grid.Column="2"
+                                            Command="{Binding RefreshPackagesCommand}"
+                                            Content="Обновить"
+                                            Style="{DynamicResource SecondaryButtonStyle}" />
+
+                                    <Button Grid.Column="4"
+                                            Command="{Binding UninstallSelectedPackagesCommand}"
+                                            Content="Удалить с ТВ"
+                                            Style="{DynamicResource DangerButtonStyle}" />
+                                </Grid>
+
+                                <StackPanel Grid.Row="1"
+                                            Margin="0,8,0,0">
+                                    <TextBlock Style="{DynamicResource Text.CaptionStyle}"
+                                               Text="{Binding InstalledPackagesSummary}" />
+                                    <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.CaptionStyle}"
-                                               Text="Пакеты на телевизорах" />
-                                    <TextBlock HorizontalAlignment="Center"
-                                               Margin="0,6,0,0"
+                                               Text="{Binding InstalledPackageSelectionSummary}" />
+                                    <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.BodyMutedStyle}"
-                                               Text="Список пакетов, поиск и удаление появятся здесь." />
+                                               Text="{Binding PackagesStatusText}"
+                                               Visibility="{Binding HasPackagesStatusText, Converter={StaticResource BoolToVisibilityConverter}}" />
                                 </StackPanel>
-                            </Border>
+
+                                <Border Grid.Row="2"
+                                        Margin="0,6,0,0"
+                                        MinHeight="188"
+                                        Style="{StaticResource RightPanelDraftSurfaceStyle}">
+                                    <Grid>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding InstalledPackagesEmptyMessage}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasInstalledPackages}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <ListBox ItemsSource="{Binding InstalledPackages}"
+                                                 SelectionMode="Extended"
+                                                 behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedInstalledPackages}"
+                                                 ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
+                                            <ListBox.Style>
+                                                <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasInstalledPackages}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ListBox.Style>
+                                            <ListBox.InputBindings>
+                                                <KeyBinding Key="Delete"
+                                                            Command="{Binding UninstallSelectedPackagesCommand}" />
+                                            </ListBox.InputBindings>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold"
+                                                                       Text="{Binding PackageName}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Margin="0,4,0,0"
+                                                                       Style="{DynamicResource Text.CaptionStyle}"
+                                                                       Text="{Binding MetaText}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+
+                                                        <Border Grid.Column="1"
+                                                                Margin="8,0,0,0"
+                                                                VerticalAlignment="Top"
+                                                                Style="{StaticResource PackagePresenceBadgeStyle}">
+                                                            <TextBlock FontSize="12"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource Brush.AccentPrimary}"
+                                                                       Text="{Binding PresenceText}" />
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                            </Grid>
                         </TabItem>
                     </TabControl>
                 </Grid>
