@@ -1,6 +1,7 @@
 using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Logcat;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
 
@@ -16,6 +17,7 @@ public sealed record ToolActivationContext(
     IDeviceDiscoveryService DeviceDiscovery,
     IAdbConnectionService AdbConnection,
     IDeviceActionService DeviceActions,
+    IDeviceLogcatService DeviceLogcat,
     IDeviceTopService DeviceTop,
     CommandTraceJournal CommandTraceJournal,
     Action<string> OpenTool);

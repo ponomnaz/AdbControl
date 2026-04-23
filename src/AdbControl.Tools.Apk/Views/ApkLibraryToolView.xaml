@@ -153,9 +153,9 @@
         </Style>
 
         <Style x:Key="RightPanelDraftSurfaceStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource Brush.BackgroundSecondary}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfacePrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderDefault}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource Radius.Card}" />
             <Setter Property="Padding" Value="{DynamicResource Padding.PanelDense}" />
         </Style>
@@ -197,74 +197,8 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="6">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <Border Style="{DynamicResource PanelSurfaceStyle}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Style="{DynamicResource Text.PageTitleStyle}"
-                           VerticalAlignment="Center"
-                           Text="APK" />
-
-                <Border Grid.Column="2"
-                        MaxWidth="460"
-                        HorizontalAlignment="Stretch"
-                        AllowDrop="True"
-                        DragEnter="OnDropZoneDragEnter"
-                        DragLeave="OnDropZoneDragLeave"
-                        DragOver="OnDropZoneDragOver"
-                        Drop="OnDropZoneDrop"
-                        MouseLeftButtonUp="OnDropZoneClick"
-                        Style="{StaticResource DropZoneStyle}">
-                    <TextBlock HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis">
-                        <Run FontWeight="SemiBold"
-                             Text="Добавить APK" />
-                        <Run Text="  " />
-                        <Run Foreground="{DynamicResource Brush.TextSecondary}"
-                             Text="перетащи или нажми" />
-                    </TextBlock>
-                </Border>
-
-                <TextBlock Grid.Row="1"
-                           Grid.ColumnSpan="2"
-                           Margin="0,8,0,0"
-                           Style="{DynamicResource Text.BodyMutedStyle}"
-                           Text="{Binding StatusText}"
-                           Visibility="{Binding HasStatusText, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-                <StackPanel Grid.Row="1"
-                            Grid.Column="2"
-                            Margin="0,12,0,0"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right">
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding InstallSelectedCommand}"
-                            Content="Установить"
-                            Style="{DynamicResource PrimaryButtonStyle}" />
-                    <Button Command="{Binding DeleteSelectedCommand}"
-                            Content="Удалить выбранные"
-                            Style="{DynamicResource DangerButtonStyle}" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="1"
-              Margin="0,6,0,0">
+    <Grid Margin="6"
+          PreviewMouseDown="OnRootPreviewMouseDown">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="19*" />
                 <ColumnDefinition Width="21*" />
@@ -277,11 +211,32 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Style="{DynamicResource Text.SectionTitleStyle}"
-                               Text="Мои APK" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Style="{DynamicResource Text.SectionTitleStyle}"
+                                   Text="Мои APK" />
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding DeleteSelectedCommand}"
+                                    Content="Удалить выбранные"
+                                    Style="{DynamicResource DangerButtonStyle}" />
+                            <Button Command="{Binding InstallSelectedCommand}"
+                                    Content="Установить"
+                                    Style="{DynamicResource PrimaryButtonStyle}" />
+                        </StackPanel>
+                    </Grid>
 
                     <StackPanel Grid.Row="1"
                                 Margin="0,12,0,0"
@@ -306,7 +261,13 @@
                                 Style="{StaticResource SortDirectionButtonStyle}" />
                     </StackPanel>
 
-                    <Grid Grid.Row="2"
+                    <TextBlock Grid.Row="2"
+                               Margin="0,8,0,0"
+                               Style="{DynamicResource Text.BodyMutedStyle}"
+                               Text="{Binding StatusText}"
+                               Visibility="{Binding HasStatusText, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                    <Grid Grid.Row="3"
                           Margin="0,12,0,0">
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
@@ -354,6 +315,26 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                     </Grid>
+
+                    <Border Grid.Row="4"
+                            Margin="0,8,0,0"
+                            AllowDrop="True"
+                            DragEnter="OnDropZoneDragEnter"
+                            DragLeave="OnDropZoneDragLeave"
+                            DragOver="OnDropZoneDragOver"
+                            Drop="OnDropZoneDrop"
+                            MouseLeftButtonUp="OnDropZoneClick"
+                            Style="{StaticResource DropZoneStyle}">
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis">
+                            <Run FontWeight="SemiBold"
+                                 Text="Добавить APK" />
+                            <Run Text="  " />
+                            <Run Foreground="{DynamicResource Brush.TextSecondary}"
+                                 Text="перетащи или нажми" />
+                        </TextBlock>
+                    </Border>
                 </Grid>
             </Border>
 
@@ -370,58 +351,58 @@
                     <TextBlock Style="{DynamicResource Text.SectionTitleStyle}"
                                Text="На телевизорах" />
 
-                    <ListBox Grid.Row="1"
-                             Margin="0,8,0,0"
-                             MaxHeight="132"
-                             ItemsSource="{Binding ConnectedDevices}"
-                             SelectionMode="Extended"
-                             behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedTargetDevices}"
-                             ItemContainerStyle="{StaticResource TargetDeviceListBoxItemStyle}">
-                        <ListBox.Style>
-                            <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasConnectedDevices}" Value="False">
+                    <Border Grid.Row="1"
+                            Margin="0,8,0,0"
+                            Style="{StaticResource RightPanelDraftSurfaceStyle}">
+                        <Grid>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding EmptyTargetsMessage}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
                                         <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ListBox.Style>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="{Binding Title}" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Style="{DynamicResource Text.CaptionStyle}"
-                                               Text="{Binding SecondaryText}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasConnectedDevices}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
 
-                    <TextBlock Grid.Row="1"
-                               Margin="0,12,0,0"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Text="{Binding EmptyTargetsMessage}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasConnectedDevices}" Value="False">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                            <ListBox MaxHeight="132"
+                                     ItemsSource="{Binding ConnectedDevices}"
+                                     SelectionMode="Extended"
+                                     behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedTargetDevices}"
+                                     ItemContainerStyle="{StaticResource TargetDeviceListBoxItemStyle}">
+                                <ListBox.Style>
+                                    <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasConnectedDevices}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.Style>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding Title}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
 
-                    <TabControl Grid.Row="2"
-                                Margin="0,6,0,0">
-                        <TabControl.Resources>
-                            <Style TargetType="TabItem" BasedOn="{StaticResource ApkModeTabItemStyle}" />
-                        </TabControl.Resources>
-                        <TabItem Header="Установить">
+                    <Border Grid.Row="2"
+                            Margin="0,6,0,0"
+                            Style="{StaticResource RightPanelDraftSurfaceStyle}">
+                        <TabControl>
+                            <TabControl.Resources>
+                                <Style TargetType="TabItem" BasedOn="{StaticResource ApkModeTabItemStyle}" />
+                            </TabControl.Resources>
+                            <TabItem Header="Установить">
                             <Grid Margin="0,6,0,0">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -430,13 +411,15 @@
 
                                 <StackPanel>
                                     <TextBlock Style="{DynamicResource Text.CaptionStyle}"
-                                               Text="{Binding InstallSelectionSummary}" />
+                                               Text="{Binding InstallSelectionSummary}"
+                                               Visibility="{Binding HasInstallSelectionSummary, Converter={StaticResource BoolToVisibilityConverter}}" />
                                     <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.CaptionStyle}"
                                                Text="{Binding InstallTargetSummary}" />
                                     <TextBlock Margin="0,4,0,0"
                                                Style="{DynamicResource Text.BodyMutedStyle}"
-                                               Text="{Binding InstallResultSummary}" />
+                                               Text="{Binding InstallResultSummary}"
+                                               Visibility="{Binding HasInstallResultSummary, Converter={StaticResource BoolToVisibilityConverter}}" />
                                 </StackPanel>
 
                                 <Border Grid.Row="1"
@@ -498,27 +481,40 @@
                                                                 CornerRadius="8">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="{DynamicResource Brush.DangerSoft}" />
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerBorder}" />
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderDefault}" />
                                                                     <Setter Property="BorderThickness" Value="1" />
                                                                     <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentSoft}" />
+                                                                        </DataTrigger>
                                                                         <DataTrigger Binding="{Binding IsSuccess}" Value="True">
                                                                             <Setter Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
                                                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentSoft}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource Brush.DangerSoft}" />
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerBorder}" />
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
                                                             <TextBlock FontSize="12"
-                                                                       FontWeight="SemiBold">
+                                                                       FontWeight="SemiBold"
+                                                                       Text="{Binding StatusText}">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
-                                                                        <Setter Property="Text" Value="Ошибка" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
                                                                         <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.AccentPrimary}" />
+                                                                            </DataTrigger>
                                                                             <DataTrigger Binding="{Binding IsSuccess}" Value="True">
                                                                                 <Setter Property="Foreground" Value="{DynamicResource Brush.AccentPrimary}" />
-                                                                                <Setter Property="Text" Value="ОК" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
@@ -532,9 +528,10 @@
                                     </Grid>
                                 </Border>
                             </Grid>
-                        </TabItem>
+                            </TabItem>
 
-                        <TabItem Header="На ТВ">
+                            <TabItem Header="На ТВ"
+                                     IsSelected="{Binding IsPackagesTabSelected, Mode=TwoWay}">
                             <Grid Margin="0,6,0,0">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -568,13 +565,14 @@
                                 </Grid>
 
                                 <StackPanel Grid.Row="1"
-                                            Margin="0,8,0,0">
+                                            Margin="0,8,0,0"
+                                            Orientation="Horizontal">
                                     <TextBlock Style="{DynamicResource Text.CaptionStyle}"
                                                Text="{Binding InstalledPackagesSummary}" />
-                                    <TextBlock Margin="0,4,0,0"
+                                    <TextBlock Margin="12,0,0,0"
                                                Style="{DynamicResource Text.CaptionStyle}"
                                                Text="{Binding InstalledPackageSelectionSummary}" />
-                                    <TextBlock Margin="0,4,0,0"
+                                    <TextBlock Margin="12,0,0,0"
                                                Style="{DynamicResource Text.BodyMutedStyle}"
                                                Text="{Binding PackagesStatusText}"
                                                Visibility="{Binding HasPackagesStatusText, Converter={StaticResource BoolToVisibilityConverter}}" />
@@ -652,10 +650,10 @@
                                     </Grid>
                                 </Border>
                             </Grid>
-                        </TabItem>
-                    </TabControl>
+                            </TabItem>
+                        </TabControl>
+                    </Border>
                 </Grid>
             </Border>
-        </Grid>
     </Grid>
 </UserControl>

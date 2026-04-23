@@ -1,0 +1,8 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:viewModels="clr-namespace:AdbControl.Tools.Logcat.ViewModels"
+                    xmlns:views="clr-namespace:AdbControl.Tools.Logcat.Views">
+    <DataTemplate DataType="{x:Type viewModels:DeviceLogcatToolViewModel}">
+        <views:DeviceLogcatToolView />
+    </DataTemplate>
+</ResourceDictionary>

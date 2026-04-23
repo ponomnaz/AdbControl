@@ -3,6 +3,7 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Logcat;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
 
@@ -19,6 +20,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly IDeviceDiscoveryService _deviceDiscovery;
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
+    private readonly IDeviceLogcatService _deviceLogcat;
     private readonly IDeviceTopService _deviceTop;
     private readonly CommandTraceJournal _commandTraceJournal;
     private WorkspaceTab? _activeTab;
@@ -33,6 +35,7 @@ public sealed class WorkspaceService : ObservableObject
         IDeviceDiscoveryService deviceDiscovery,
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
+        IDeviceLogcatService deviceLogcat,
         IDeviceTopService deviceTop,
         CommandTraceJournal commandTraceJournal)
     {
@@ -45,6 +48,7 @@ public sealed class WorkspaceService : ObservableObject
         _deviceDiscovery = deviceDiscovery;
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
+        _deviceLogcat = deviceLogcat;
         _deviceTop = deviceTop;
         _commandTraceJournal = commandTraceJournal;
     }
@@ -112,6 +116,7 @@ public sealed class WorkspaceService : ObservableObject
             _deviceDiscovery,
             _adbConnection,
             _deviceActions,
+            _deviceLogcat,
             _deviceTop,
             _commandTraceJournal,
             OpenTool);

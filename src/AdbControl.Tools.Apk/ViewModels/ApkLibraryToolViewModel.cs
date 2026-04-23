@@ -19,11 +19,13 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     private bool _isRefreshingTargetSelection;
     private bool _isBusy;
     private bool _isDropActive;
-    private string _statusText = "Перетащи APK сюда или загрузи файл.";
-    private string _packagesStatusText = "Выбери телевизоры и нажми «Обновить».";
+    private string _statusText = string.Empty;
+    private string _packagesStatusText = "Выбери телевизоры.";
     private string _packageSearchText = string.Empty;
     private bool _hasLoadedInstalledPackages;
     private bool _packageLoadFailedOnly;
+    private bool _isPackagesTabSelected;
+    private int _packagesRefreshVersion;
     private ApkSortField _sortField = ApkSortField.Name;
     private bool _isSortDescending;
 
@@ -115,6 +117,18 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
 
     public bool HasPackagesStatusText => !string.IsNullOrWhiteSpace(PackagesStatusText);
 
+    public bool IsPackagesTabSelected
+    {
+        get => _isPackagesTabSelected;
+        set
+        {
+            if (SetProperty(ref _isPackagesTabSelected, value) && value)
+            {
+                _ = QueueAutoRefreshPackagesAsync();
+            }
+        }
+    }
+
     public string PackageSearchText
     {
         get => _packageSearchText;
@@ -166,10 +180,12 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     public string EmptyTargetsMessage => "Подключи телевизор, чтобы работать с ним здесь.";
 
     public string InstallSelectionSummary => SelectedEntries.Count == 0
-        ? "APK не выбраны"
+        ? string.Empty
         : SelectedEntries.Count == 1
             ? SelectedEntries[0].DisplayName
             : $"APK: {SelectedEntries.Count}";
+
+    public bool HasInstallSelectionSummary => !string.IsNullOrWhiteSpace(InstallSelectionSummary);
 
     public string InstallTargetSummary => SelectedTargetDeviceCount == 0
         ? "Телевизоры не выбраны"
@@ -178,8 +194,10 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
             : $"Телевизоры: {SelectedTargetDeviceCount}";
 
     public string InstallResultSummary => InstallResults.Count == 0
-        ? "Установка ещё не запускалась."
+        ? string.Empty
         : $"Операций: {InstallResults.Count}";
+
+    public bool HasInstallResultSummary => !string.IsNullOrWhiteSpace(InstallResultSummary);
 
     public bool HasInstallResults => InstallResults.Count > 0;
 
@@ -187,25 +205,21 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
 
     public string InstalledPackagesSummary => !_hasLoadedInstalledPackages || _packageLoadFailedOnly
         ? string.Empty
-        : InstalledPackages.Count == 0
-            ? "Пакеты не найдены"
-            : InstalledPackages.Count == 1
-                ? "1 пакет"
-                : $"Пакетов: {InstalledPackages.Count}";
+        : $"Пакетов: {InstalledPackages.Count}";
 
     public string InstalledPackagesEmptyMessage => SelectedTargetDeviceCount == 0
         ? "Выбери телевизоры."
         : !_hasLoadedInstalledPackages
-            ? "Нажми «Обновить», чтобы получить пакеты."
+            ? string.Empty
             : _packageLoadFailedOnly
                 ? "Не удалось получить пакеты."
                 : "Пакеты не найдены.";
 
     public string InstalledPackageSelectionSummary => SelectedInstalledPackages.Count == 0
-        ? "Пакеты не выбраны"
-        : SelectedInstalledPackages.Count == 1
-            ? SelectedInstalledPackages[0].PackageName
-            : $"Выбрано пакетов: {SelectedInstalledPackages.Count}";
+        ? string.IsNullOrWhiteSpace(InstalledPackagesSummary) ? string.Empty : "Выбрано: 0"
+        : string.IsNullOrWhiteSpace(InstalledPackagesSummary)
+            ? string.Empty
+            : $"Выбрано: {SelectedInstalledPackages.Count}";
 
     public bool IsSortByName
     {
@@ -287,9 +301,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
             _isBusy = true;
             NotifyCommandStateChanged();
             await ReloadEntriesAsync();
-            StatusText = Entries.Count == 0
-                ? "Перетащи APK сюда или загрузи файл."
-                : string.Empty;
+            StatusText = string.Empty;
         }
         catch (Exception ex)
         {
@@ -368,22 +380,68 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
                 ? "Установка APK..."
                 : $"Установка: {apks.Length} APK на {devices.Length} ТВ";
 
-            var result = await _apkDeployment.InstallAsync(apks, devices);
-
             InstallResults.Clear();
-            foreach (var operation in result.Operations)
+
+            var operationItems = new List<(ApkInstallResultItemViewModel Item, ApkLibraryEntry Apk, TvDeviceProfile Device)>();
+            foreach (var device in devices)
             {
-                InstallResults.Add(new ApkInstallResultItemViewModel(operation));
+                foreach (var apk in apks)
+                {
+                    var item = ApkInstallResultItemViewModel.CreatePending(
+                        apk.DisplayName,
+                        device.DisplayName,
+                        GetSelectionKey(device));
+
+                    InstallResults.Add(item);
+                    operationItems.Add((item, apk, device));
+                }
             }
 
             OnPropertyChanged(nameof(InstallResultSummary));
+            OnPropertyChanged(nameof(HasInstallResultSummary));
             OnPropertyChanged(nameof(HasInstallResults));
 
-            StatusText = result.FailureCount == 0
-                ? $"Установлено: {result.SuccessCount}"
-                : $"Установлено: {result.SuccessCount}, ошибок: {result.FailureCount}";
+            var successCount = 0;
+            var failureCount = 0;
 
-            ResetInstalledPackages("Список пакетов устарел. Нажми «Обновить».");
+            foreach (var (item, apk, device) in operationItems)
+            {
+                item.MarkRunning();
+
+                try
+                {
+                    var result = await _apkDeployment.InstallAsync([apk], [device]);
+                    var operation = result.Operations.FirstOrDefault()
+                        ?? new ApkInstallOperationResult(
+                            apk.DisplayName,
+                            device.DisplayName,
+                            GetSelectionKey(device),
+                            false,
+                            "Не удалось выполнить установку.");
+
+                    item.ApplyResult(operation);
+
+                    if (operation.IsSuccess)
+                    {
+                        successCount++;
+                    }
+                    else
+                    {
+                        failureCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    item.MarkFailed(ex.Message);
+                    failureCount++;
+                }
+            }
+
+            StatusText = failureCount == 0
+                ? $"Установлено: {successCount}"
+                : $"Установлено: {successCount}, ошибок: {failureCount}";
+
+            await RefreshPackagesAfterMutationAsync(devices);
         }
         catch (Exception ex)
         {
@@ -397,6 +455,11 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     }
 
     private async Task RefreshPackagesAsync()
+    {
+        await RefreshPackagesAsync(isAutomatic: false);
+    }
+
+    private async Task RefreshPackagesAsync(bool isAutomatic)
     {
         var devices = SelectedTargetDevices
             .Select(static entry => entry.Device)
@@ -420,10 +483,13 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
             ApplyInstalledPackages(result);
 
             PackagesStatusText = result.FailureCount == 0
-                ? result.SuccessCount == 1
-                    ? "Пакеты обновлены."
-                    : $"Пакеты обновлены: {result.SuccessCount} ТВ"
-                : $"Пакеты обновлены: {result.SuccessCount}, ошибок: {result.FailureCount}";
+                ? string.Empty
+                : result.SuccessCount == 0
+                    ? "Не удалось получить пакеты."
+                    : $"Получено: {result.SuccessCount}, ошибок: {result.FailureCount}";
+        }
+        catch (OperationCanceledException) when (isAutomatic)
+        {
         }
         catch (Exception ex)
         {
@@ -513,6 +579,51 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         ApplyInstalledPackages(result);
     }
 
+    private async Task RefreshPackagesAfterMutationAsync(IReadOnlyList<TvDeviceProfile> devices)
+    {
+        if (devices.Count == 0)
+        {
+            ResetInstalledPackages(string.Empty);
+            return;
+        }
+
+        try
+        {
+            await RefreshPackagesCoreAsync(devices);
+            PackagesStatusText = string.Empty;
+        }
+        catch
+        {
+            ResetInstalledPackages(string.Empty);
+        }
+    }
+
+    private async Task QueueAutoRefreshPackagesAsync()
+    {
+        if (!IsPackagesTabSelected || SelectedTargetDeviceCount == 0)
+        {
+            return;
+        }
+
+        var version = ++_packagesRefreshVersion;
+        while (true)
+        {
+            await Task.Delay(180);
+
+            if (version != _packagesRefreshVersion || !IsPackagesTabSelected || SelectedTargetDeviceCount == 0)
+            {
+                return;
+            }
+
+            if (!_isBusy)
+            {
+                break;
+            }
+        }
+
+        await RefreshPackagesAsync(isAutomatic: true);
+    }
+
     private void RebuildEntries()
     {
         var originalOrder = _allEntries
@@ -536,6 +647,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(HasEntries));
         OnPropertyChanged(nameof(InstallSelectionSummary));
+        OnPropertyChanged(nameof(HasInstallSelectionSummary));
     }
 
     private void ApplyInstalledPackages(DevicePackagesBatchResult result)
@@ -686,6 +798,7 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectionSummary));
         OnPropertyChanged(nameof(InstallSelectionSummary));
+        OnPropertyChanged(nameof(HasInstallSelectionSummary));
         NotifyCommandStateChanged();
     }
 
@@ -701,8 +814,13 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(TargetSelectionSummary));
         OnPropertyChanged(nameof(InstallTargetSummary));
         ResetInstalledPackages(SelectedTargetDeviceCount == 0
-            ? "Выбери телевизоры и нажми «Обновить»."
-            : "Нажми «Обновить», чтобы получить пакеты.");
+            ? "Выбери телевизоры."
+            : string.Empty);
+        if (SelectedTargetDeviceCount > 0 && IsPackagesTabSelected)
+        {
+            _ = QueueAutoRefreshPackagesAsync();
+        }
+
         NotifyCommandStateChanged();
     }
 
@@ -786,8 +904,13 @@ public sealed class ApkLibraryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(TargetSelectionSummary));
         OnPropertyChanged(nameof(InstallTargetSummary));
         ResetInstalledPackages(SelectedTargetDeviceCount == 0
-            ? "Выбери телевизоры и нажми «Обновить»."
-            : "Нажми «Обновить», чтобы получить пакеты.");
+            ? "Выбери телевизоры."
+            : string.Empty);
+        if (SelectedTargetDeviceCount > 0 && IsPackagesTabSelected)
+        {
+            _ = QueueAutoRefreshPackagesAsync();
+        }
+
         NotifyCommandStateChanged();
     }
 
@@ -918,13 +1041,31 @@ public sealed class ApkTargetDeviceViewModel : ObservableObject
 
 public sealed class ApkInstallResultItemViewModel : ObservableObject
 {
-    public ApkInstallResultItemViewModel(ApkInstallOperationResult result)
+    private ApkInstallResultState _state;
+    private string _message;
+
+    private ApkInstallResultItemViewModel(
+        string apkDisplayName,
+        string deviceDisplayName,
+        string deviceTarget,
+        ApkInstallResultState state,
+        string message)
     {
-        ApkDisplayName = result.ApkDisplayName;
-        DeviceDisplayName = result.DeviceDisplayName;
-        DeviceTarget = result.DeviceTarget;
-        IsSuccess = result.IsSuccess;
-        Message = result.Message;
+        ApkDisplayName = apkDisplayName;
+        DeviceDisplayName = deviceDisplayName;
+        DeviceTarget = deviceTarget;
+        _state = state;
+        _message = message;
+    }
+
+    public static ApkInstallResultItemViewModel CreatePending(string apkDisplayName, string deviceDisplayName, string deviceTarget)
+    {
+        return new ApkInstallResultItemViewModel(
+            apkDisplayName,
+            deviceDisplayName,
+            deviceTarget,
+            ApkInstallResultState.Pending,
+            "Ждёт.");
     }
 
     public string ApkDisplayName { get; }
@@ -933,9 +1074,65 @@ public sealed class ApkInstallResultItemViewModel : ObservableObject
 
     public string DeviceTarget { get; }
 
-    public bool IsSuccess { get; }
+    public bool IsPending => _state == ApkInstallResultState.Pending;
 
-    public string Message { get; }
+    public bool IsRunning => _state == ApkInstallResultState.Running;
+
+    public bool IsSuccess => _state == ApkInstallResultState.Success;
+
+    public bool IsFailed => _state == ApkInstallResultState.Failed;
+
+    public string StatusText => _state switch
+    {
+        ApkInstallResultState.Pending => "Ждёт",
+        ApkInstallResultState.Running => "Идёт",
+        ApkInstallResultState.Success => "ОК",
+        _ => "Ошибка"
+    };
+
+    public string Message
+    {
+        get => _message;
+        private set => SetProperty(ref _message, value);
+    }
+
+    public void MarkRunning()
+    {
+        UpdateState(ApkInstallResultState.Running, "Устанавливается...");
+    }
+
+    public void ApplyResult(ApkInstallOperationResult result)
+    {
+        UpdateState(result.IsSuccess ? ApkInstallResultState.Success : ApkInstallResultState.Failed, result.Message);
+    }
+
+    public void MarkFailed(string message)
+    {
+        UpdateState(ApkInstallResultState.Failed, message);
+    }
+
+    private void UpdateState(ApkInstallResultState state, string message)
+    {
+        if (_state != state)
+        {
+            _state = state;
+            OnPropertyChanged(nameof(IsPending));
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(IsSuccess));
+            OnPropertyChanged(nameof(IsFailed));
+            OnPropertyChanged(nameof(StatusText));
+        }
+
+        Message = message;
+    }
+}
+
+public enum ApkInstallResultState
+{
+    Pending,
+    Running,
+    Success,
+    Failed
 }
 
 public sealed class ApkInstalledPackageItemViewModel : ObservableObject

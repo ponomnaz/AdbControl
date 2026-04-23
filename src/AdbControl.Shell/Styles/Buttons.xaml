@@ -60,17 +60,16 @@
     </Style>
 
     <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource ButtonBaseStyle}">
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfacePrimary}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerBorder}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Background" Value="{DynamicResource Brush.DangerPrimary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerPrimary}" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{DynamicResource Brush.DangerSoft}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerPrimary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.DangerHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerHover}" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{DynamicResource Brush.DangerSoft}" />
-                <Setter Property="Foreground" Value="{DynamicResource Brush.DangerHover}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.DangerHover}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.DangerHover}" />
             </Trigger>
         </Style.Triggers>

@@ -20,7 +20,8 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="6">
+    <Grid Margin="6"
+          PreviewMouseDown="OnRootPreviewMouseDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
