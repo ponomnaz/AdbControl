@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Collections.Concurrent;
+using System.Text;
 using System.Windows;
+using System.Windows.Threading;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Logcat;
@@ -15,12 +18,16 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly IDeviceLogcatService _deviceLogcatService;
+    private readonly ConcurrentQueue<LogcatOutputLine> _pendingLines = new();
+    private readonly DispatcherTimer _flushTimer;
     private readonly List<LogcatLineItemViewModel> _allLines = [];
+    private readonly StringBuilder _visibleTextBuilder = new();
     private LogcatDeviceOptionViewModel? _selectedDevice;
     private IDeviceLogcatSession? _session;
     private string _filterArguments = string.Empty;
     private string _searchText = string.Empty;
     private string _statusText;
+    private string _visibleText = string.Empty;
     private bool _isBusy;
     private bool _isRunning;
     private bool _isDisposed;
@@ -34,6 +41,11 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
         _deviceAliases = deviceAliases;
         _deviceLogcatService = deviceLogcatService;
         _statusText = "Устройство не выбрано";
+        _flushTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(120)
+        };
+        _flushTimer.Tick += OnFlushTimerTick;
 
         StartCommand = new RelayCommand(
             () => _ = StartAsync(),
@@ -52,6 +64,7 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
         _deviceAliases.Changed += OnAliasesChanged;
 
         RefreshConnectedDevices();
+        _flushTimer.Start();
     }
 
     public ObservableCollection<LogcatDeviceOptionViewModel> ConnectedDevices { get; } = [];
@@ -108,6 +121,12 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
     {
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
+    }
+
+    public string VisibleText
+    {
+        get => _visibleText;
+        private set => SetProperty(ref _visibleText, value);
     }
 
     public string DeviceSummary => ConnectedDevices.Count == 0
@@ -255,29 +274,65 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(() => AddLine(line));
+        _pendingLines.Enqueue(line);
     }
 
-    private void AddLine(LogcatOutputLine line)
+    private void OnFlushTimerTick(object? sender, EventArgs e)
     {
-        var item = new LogcatLineItemViewModel(line.Text, line.IsError);
-        _allLines.Add(item);
+        FlushPendingLines();
+    }
 
-        if (MatchesSearch(item))
+    private void FlushPendingLines()
+    {
+        if (_pendingLines.IsEmpty)
         {
-            VisibleLines.Add(item);
+            return;
         }
 
-        while (_allLines.Count > MaxLines)
+        var addedVisibleLines = new List<LogcatLineItemViewModel>();
+        var removedVisibleLine = false;
+        var useIncrementalAppend = string.IsNullOrWhiteSpace(SearchText);
+
+        while (_pendingLines.TryDequeue(out var line))
         {
-            var removed = _allLines[0];
-            _allLines.RemoveAt(0);
-            VisibleLines.Remove(removed);
+            var item = new LogcatLineItemViewModel(line.Text, line.IsError);
+            _allLines.Add(item);
+
+            if (MatchesSearch(item))
+            {
+                VisibleLines.Add(item);
+                addedVisibleLines.Add(item);
+            }
+
+            while (_allLines.Count > MaxLines)
+            {
+                var removed = _allLines[0];
+                _allLines.RemoveAt(0);
+                if (VisibleLines.Remove(removed))
+                {
+                    removedVisibleLine = true;
+                }
+            }
+        }
+
+        if (useIncrementalAppend && !removedVisibleLine)
+        {
+            foreach (var item in addedVisibleLines)
+            {
+                AppendVisibleLineText(item.Text);
+            }
+
+            VisibleText = _visibleTextBuilder.ToString();
+        }
+        else
+        {
+            RebuildVisibleText();
         }
 
         OnPropertyChanged(nameof(LineSummary));
         OnPropertyChanged(nameof(HasVisibleLines));
         OnPropertyChanged(nameof(EmptyStateMessage));
+        NotifyCommandStateChanged();
     }
 
     private void RebuildVisibleLines()
@@ -289,9 +344,11 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
             VisibleLines.Add(item);
         }
 
+        RebuildVisibleText();
         OnPropertyChanged(nameof(LineSummary));
         OnPropertyChanged(nameof(HasVisibleLines));
         OnPropertyChanged(nameof(EmptyStateMessage));
+        NotifyCommandStateChanged();
     }
 
     private bool MatchesSearch(LogcatLineItemViewModel item)
@@ -303,11 +360,40 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
 
     private void ClearLines()
     {
+        while (_pendingLines.TryDequeue(out _))
+        {
+        }
+
         _allLines.Clear();
         VisibleLines.Clear();
+        _visibleTextBuilder.Clear();
+        VisibleText = string.Empty;
         OnPropertyChanged(nameof(LineSummary));
         OnPropertyChanged(nameof(HasVisibleLines));
         OnPropertyChanged(nameof(EmptyStateMessage));
+        NotifyCommandStateChanged();
+    }
+
+    private void AppendVisibleLineText(string text)
+    {
+        if (_visibleTextBuilder.Length > 0)
+        {
+            _visibleTextBuilder.AppendLine();
+        }
+
+        _visibleTextBuilder.Append(text);
+    }
+
+    private void RebuildVisibleText()
+    {
+        _visibleTextBuilder.Clear();
+
+        foreach (var item in VisibleLines)
+        {
+            AppendVisibleLineText(item.Text);
+        }
+
+        VisibleText = _visibleTextBuilder.ToString();
     }
 
     private void RefreshConnectedDevices()
@@ -402,6 +488,8 @@ public sealed class DeviceLogcatToolViewModel : ObservableObject, IDisposable
         }
 
         _isDisposed = true;
+        _flushTimer.Stop();
+        _flushTimer.Tick -= OnFlushTimerTick;
         _deviceInventory.KnownDevices.CollectionChanged -= OnKnownDevicesChanged;
         _deviceAliases.Changed -= OnAliasesChanged;
         _ = StopAsync();

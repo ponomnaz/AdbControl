@@ -7,19 +7,17 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
-        <Style x:Key="LogcatLineItemStyle" TargetType="ListBoxItem">
+        <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,0,2" />
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <ContentPresenter />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="13" />
         </Style>
     </UserControl.Resources>
 
@@ -138,13 +136,11 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <ListBox x:Name="LogLinesListBox"
-                         ItemsSource="{Binding VisibleLines}"
-                         ItemContainerStyle="{StaticResource LogcatLineItemStyle}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
-                    <ListBox.Style>
-                        <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
+                <TextBox x:Name="LogOutputTextBox"
+                         Text="{Binding VisibleText, Mode=OneWay}"
+                         TextChanged="OnLogOutputTextChanged">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource ConsoleTextBoxStyle}">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding HasVisibleLines}" Value="True">
@@ -152,27 +148,8 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </ListBox.Style>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock FontFamily="Consolas"
-                                       FontSize="13"
-                                       Text="{Binding Text}"
-                                       TextWrapping="NoWrap">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsError}" Value="True">
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                    </TextBox.Style>
+                </TextBox>
             </Grid>
         </Border>
     </Grid>

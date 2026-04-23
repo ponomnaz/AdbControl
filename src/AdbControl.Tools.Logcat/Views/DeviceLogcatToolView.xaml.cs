@@ -2,69 +2,40 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using AdbControl.Tools.Logcat.ViewModels;
 
 namespace AdbControl.Tools.Logcat.Views;
 
 public partial class DeviceLogcatToolView : UserControl
 {
-    private DeviceLogcatToolViewModel? _viewModel;
+    private const double BottomTolerance = 1.5;
+    private const double ScrollDeltaTolerance = 0.01;
+
     private ScrollViewer? _scrollViewer;
     private bool _followTail = true;
+    private bool _isSyncingViewport;
+    private bool _isViewportSyncScheduled;
+    private double _manualVerticalOffset;
 
     public DeviceLogcatToolView()
     {
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        DataContextChanged += OnDataContextChanged;
     }
 
     private void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
     {
         AttachScrollViewer();
-        SyncViewModel(DataContext as DeviceLogcatToolViewModel);
     }
 
     private void OnUnloaded(object sender, System.Windows.RoutedEventArgs e)
     {
         DetachScrollViewer();
-        SyncViewModel(null);
     }
 
-    private void OnDataContextChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+    private void OnLogOutputTextChanged(object sender, TextChangedEventArgs e)
     {
-        SyncViewModel(e.NewValue as DeviceLogcatToolViewModel);
-    }
-
-    private void SyncViewModel(DeviceLogcatToolViewModel? nextViewModel)
-    {
-        if (ReferenceEquals(_viewModel, nextViewModel))
-        {
-            return;
-        }
-
-        if (_viewModel is not null)
-        {
-            _viewModel.VisibleLines.CollectionChanged -= OnVisibleLinesChanged;
-        }
-
-        _viewModel = nextViewModel;
-
-        if (_viewModel is not null)
-        {
-            _viewModel.VisibleLines.CollectionChanged += OnVisibleLinesChanged;
-        }
-    }
-
-    private void OnVisibleLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (!_followTail || _scrollViewer is null)
-        {
-            return;
-        }
-
-        Dispatcher.BeginInvoke(() => _scrollViewer?.ScrollToEnd());
+        ScheduleViewportSync();
     }
 
     private void AttachScrollViewer()
@@ -74,9 +45,11 @@ public partial class DeviceLogcatToolView : UserControl
             return;
         }
 
-        _scrollViewer = FindVisualChild<ScrollViewer>(LogLinesListBox);
+        _scrollViewer = FindVisualChild<ScrollViewer>(LogOutputTextBox);
         if (_scrollViewer is not null)
         {
+            _followTail = IsAtBottom(_scrollViewer);
+            _manualVerticalOffset = _scrollViewer.VerticalOffset;
             _scrollViewer.ScrollChanged += OnScrollViewerScrollChanged;
         }
     }
@@ -94,7 +67,80 @@ public partial class DeviceLogcatToolView : UserControl
 
     private void OnScrollViewerScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        _followTail = e.VerticalOffset >= e.ExtentHeight - e.ViewportHeight - 2;
+        if (_scrollViewer is null || _isSyncingViewport)
+        {
+            return;
+        }
+
+        if (Math.Abs(e.VerticalChange) < ScrollDeltaTolerance &&
+            Math.Abs(e.ExtentHeightChange) < ScrollDeltaTolerance)
+        {
+            return;
+        }
+
+        if (Math.Abs(e.ExtentHeightChange) < ScrollDeltaTolerance)
+        {
+            _followTail = IsAtBottom(_scrollViewer);
+            if (!_followTail)
+            {
+                _manualVerticalOffset = _scrollViewer.VerticalOffset;
+            }
+
+            return;
+        }
+
+        if (_followTail)
+        {
+            ScheduleViewportSync();
+            return;
+        }
+
+        _manualVerticalOffset = Math.Min(_manualVerticalOffset, _scrollViewer.ScrollableHeight);
+        ScheduleViewportSync();
+    }
+
+    private void ScheduleViewportSync()
+    {
+        if (_scrollViewer is null || _isViewportSyncScheduled)
+        {
+            return;
+        }
+
+        _isViewportSyncScheduled = true;
+
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(() =>
+            {
+                _isViewportSyncScheduled = false;
+
+                if (_scrollViewer is null)
+                {
+                    return;
+                }
+
+                _isSyncingViewport = true;
+                try
+                {
+                    if (_followTail)
+                    {
+                        _scrollViewer.ScrollToVerticalOffset(_scrollViewer.ScrollableHeight);
+                        return;
+                    }
+
+                    var targetOffset = Math.Min(_manualVerticalOffset, _scrollViewer.ScrollableHeight);
+                    _scrollViewer.ScrollToVerticalOffset(targetOffset);
+                }
+                finally
+                {
+                    _isSyncingViewport = false;
+                }
+            }));
+    }
+
+    private static bool IsAtBottom(ScrollViewer scrollViewer)
+    {
+        return scrollViewer.VerticalOffset >= scrollViewer.ScrollableHeight - BottomTolerance;
     }
 
     private static T? FindVisualChild<T>(DependencyObject? root)
