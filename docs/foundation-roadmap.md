@@ -1,63 +1,77 @@
 # Foundation Roadmap
 
-## Этап 0. Уже сделано
+## Что уже поднято
 
-- solution и git-friendly структура репозитория
-- модульный shell без ADB-команд
-- tool registry и workspace tabs
-- базовые placeholder-модули
-- политика хранения runtime-данных вне директории установки
-- папки под assets, styles и installer
+Фундамент больше не пустой. В проекте уже есть:
 
-## Этап 1. Device Foundation
+- рабочий WPF shell с левой навигацией и tab-workspace
+- tool-model через `IToolModule`, `ToolRegistration`, `ToolCatalog`
+- shared state для устройств, aliases и command trace
+- единый ADB execution path через `AdbProcessRunner`
+- локальная APK-библиотека
+- `Устройства`, `Подключение`, `APK`, `Logcat`, `Top`, `Журнал`
+- политика хранения runtime-данных в `%LOCALAPPDATA%\AdbControl`
 
-Цель: подготовить реальную рабочую основу для ТВ до добавления тяжёлых команд.
+То есть следующий этап — не “строить каркас”, а стабилизировать и расширять уже существующий workbench.
 
-- сделать saved TV inventory
-- добавить экран редактирования сетевых endpoint'ов
-- ввести global selection state и pinned selection для вкладок
-- определить жизненный цикл device presence: `Known / Reachable / Connected / Offline`
-- решить, как будет выглядеть device rail в компактном окне
+## Ближайший практический roadmap
 
-## Этап 2. Execution Foundation
+### Этап 1. Stabilize current tools
 
-Цель: добавить общий execution pipeline, но ещё не размазывать конкретные команды по UI.
+Цель: довести существующие инструменты до предсказуемого рабочего состояния.
 
-- ввести `OperationRequest / OperationResult`
-- сделать executor abstraction для single-device и multi-device fan-out
-- определить статусные состояния выполнения
-- предусмотреть cancel/timeout contract
-- отделить UI-формы от самой ADB execution логики
+- дополировать `Logcat`:
+  - presets фильтров
+  - pause/freeze без остановки сессии
+  - экспорт выделенного или всего окна
+- дополировать `APK`:
+  - лучшее UX-разделение install / installed packages
+  - честные bulk-операции и статусы по устройствам
+  - ещё меньше лишнего текста и промежуточных состояний
+- унифицировать поведение selection / scroll / empty-states между модулями
 
-## Этап 3. Первая полезная вертикаль
+### Этап 2. Productivity layer
 
-Рекомендую первой довести до конца именно одну простую вертикаль, а не распыляться.
+Цель: ускорить повторяющиеся сценарии.
 
-Порядок:
-
-1. device inventory
-2. quick actions: power / reconnect / restart app
-3. packages explorer
-4. display settings
-
-## Этап 4. Streaming Layer
-
-- logcat session
-- CPU / memory live metrics
-- bounded buffers и virtualization
-- честный disconnect UX без auto-reconnect магии
-
-## Этап 5. Productivity Layer
-
-- favorites
-- presets
+- избранные действия
+- простые пресеты
 - command palette
-- shareable presets
-- simple workflows
+- быстрый вход в частые действия по выбранному ТВ
 
-## Этап 6. Packaging
+### Этап 3. Device tooling expansion
 
-- WiX-based MSI
-- нормальный install path
-- uninstall binaries
-- отдельный cleanup local app data по явному решению
+Цель: расширять охват без переписывания архитектуры.
+
+Приоритетные кандидаты:
+
+- просмотр/удаление кэша
+- display tools (`wm size`, `wm density`)
+- shell/file tools
+- richer package actions
+- дополнительные диагностические экраны
+
+### Этап 4. Packaging and distribution
+
+Цель: превратить dev-workbench в нормально устанавливаемое приложение.
+
+- MSI / installer
+- uninstall flow
+- cleanup `%LOCALAPPDATA%\AdbControl` только по явному решению
+- решение по `adb`: внешний `PATH` или bundled runtime
+
+## Что важно не ломать по дороге
+
+- не тащить ADB-логику в UI напрямую
+- не плодить специальные пути выполнения мимо `AdbProcessRunner`
+- не превращать shell в набор несвязанных исключений
+- не смешивать локальные APK и device packages в одну абстракцию
+
+## Что пока сознательно не делаем
+
+- cross-platform
+- runtime plugin system
+- heavy workflow engine
+- полноценную test-infrastructure
+
+Это не запреты навсегда, а сознательный сдвиг сложности вправо, пока продукт ещё быстро меняет форму.

@@ -1,68 +1,93 @@
 # AdbControl
 
-Windows-only desktop workbench на `C# / .NET 10 / WPF` для работы с Android TV через ADB.  
-Сейчас в репозитории уже есть архитектурный фундамент: shell, workspace-вкладки, tool-модули, каталог инструментов, дизайн-система и общая схема хранения локальных данных приложения.
+Windows-only desktop workbench на `C# / .NET 10 / WPF` для работы с Android TV через ADB.
 
-## Что уже подготовлено
+Это уже не пустой архитектурный каркас. В репозитории есть рабочий shell, модульные инструменты, локальная APK-библиотека, сетевое подключение устройств, live `Logcat`, `Top` и журнал ADB-команд.
 
-- `AdbControl.sln` с разделением на `Core`, `Application`, `Infrastructure`, `Shell`, `Tools.*`, `App`
-- базовый WPF shell с вкладками, device rail, context pane и нижней activity-зоной
-- модульная регистрация tools без runtime plugin system
-- зафиксированная дизайн-система в `src/AdbControl.Shell/Styles/`
-- логотип приложения в `assets/icons/` и подключение его в продукт
-- документы по структуре, roadmap и installer/uninstall
+## Что уже умеет приложение
 
-## Как собрать
+- `Устройства` — список подключённых ТВ, multi-select, псевдонимы, быстрые действия
+- `Подключение` — поиск ТВ в локальной сети, ручной ввод IP, `connect / disconnect`
+- `APK` — локальная библиотека APK, установка на одно или несколько устройств, просмотр и удаление пакетов на ТВ
+- `Logcat` — live-вывод для выбранного устройства, фильтр, поиск, очистка экрана и буфера
+- `Top` — снимок нагрузки процессов выбранного устройства
+- `Журнал` — трассировка ADB-команд, времени выполнения, `stdout`, `stderr` и ошибок
+
+## Как это устроено
+
+- один WPF-процесс и один shell с вкладками
+- модульный монолит, а не runtime-plugin system
+- каждый экран регистрируется как `IToolModule -> ToolRegistration`
+- вкладки и открытие tools управляются через `WorkspaceService`
+- все ADB-команды проходят через `AdbProcessRunner`
+- ADB-команды и их результат попадают в `CommandTraceJournal`
+- runtime-данные приложения живут в `%LOCALAPPDATA%\\AdbControl`, а не рядом с `exe`
+
+Подробная схема лежит в [docs/architecture-overview.md](docs/architecture-overview.md).
+
+## Требования
+
+- Windows
+- `.NET 10 SDK`
+- `adb.exe` должен быть доступен в `PATH`
+
+Если `adb` не найден, это отразится в `Журнале` и команды устройств работать не будут.
+
+## Сборка и запуск
 
 ```powershell
-dotnet build AdbControl.sln
+dotnet build .\AdbControl.sln -m:1
+dotnet run --project .\src\AdbControl.App\AdbControl.App.csproj
 ```
 
-Если сборка запускается в ограниченной среде или sandbox, можно использовать:
+Если приложение уже запущено и держит DLL:
 
 ```powershell
-dotnet build AdbControl.sln -m:1
+Get-Process AdbControl.App -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
-## Где что лежит
+Подробности и частые сценарии запуска: [docs/build-run.md](docs/build-run.md).
 
-- [docs/repo-structure.md](docs/repo-structure.md) — структура репозитория
-- [docs/foundation-roadmap.md](docs/foundation-roadmap.md) — roadmap по наращиванию фич
-- [docs/build-run.md](docs/build-run.md) — команды для сборки и запуска
-- [local/README.md](local/README.md) — локальные проектные инструкции
-- [local/design-system.md](local/design-system.md) — зафиксированная дизайн-система
-- [local/installer.md](local/installer.md) — как подходить к installer/uninstall
-- [local/what-next.md](local/what-next.md) — ближайшие следующие шаги
-- [assets/README.md](assets/README.md) — куда класть иконки и другие ассеты
+## Runtime-данные
 
-## Логотип приложения
-
-Источник:
-
-- `assets/icons/icon_adb.svg`
-
-Сгенерированные продуктовые форматы:
-
-- `assets/icons/icon_adb.png`
-- `assets/icons/icon_adb.ico`
-
-## Политика хранения данных приложения
-
-Приложение **не должно** писать runtime-данные в директорию установки.  
-Все создаваемые приложением файлы должны жить в:
+Рабочий каталог приложения:
 
 ```text
 %LOCALAPPDATA%\AdbControl
 ```
 
-Сейчас для этого уже заложены директории:
+Основные подпапки:
 
 - `settings`
 - `presets`
 - `layout`
 - `logs`
 - `cache`
+- `apks`
 - `sessions`
 - `exports`
 
-Эта политика закреплена в [AppDataPaths.cs](src/AdbControl.Infrastructure/Persistence/AppDataPaths.cs).
+Полезные файлы:
+
+- `%LOCALAPPDATA%\AdbControl\logs\command-trace.jsonl`
+- `%LOCALAPPDATA%\AdbControl\logs\app-crash.log`
+- `%LOCALAPPDATA%\AdbControl\settings\device-aliases.json`
+- `%LOCALAPPDATA%\AdbControl\settings\apk-library.json`
+
+## Документация
+
+- [docs/architecture-overview.md](docs/architecture-overview.md) — текущая архитектура и runtime-модель
+- [docs/repo-structure.md](docs/repo-structure.md) — структура solution и назначение проектов
+- [docs/foundation-roadmap.md](docs/foundation-roadmap.md) — актуальный roadmap после поднятия фундамента
+- [docs/build-run.md](docs/build-run.md) — сборка, запуск и типовые проблемы
+- [local/README.md](local/README.md) — локальные проектные инструкции
+- [local/design-system.md](local/design-system.md) — зафиксированная дизайн-система
+- [local/installer.md](local/installer.md) — заметки по installer / uninstall
+- [assets/README.md](assets/README.md) — куда класть иконки и другие ассеты
+
+## Ограничения текущего состояния
+
+- автоматических тестов пока нет
+- dependency graph собирается вручную в `App.xaml.cs`, без DI-контейнера
+- приложение зависит от установленного `adb` в `PATH`
+- shell и UX ещё активно шлифуются, особенно в streaming-инструментах
