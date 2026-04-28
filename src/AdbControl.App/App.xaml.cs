@@ -2,13 +2,16 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Terminal;
 using AdbControl.Application.Tools;
 using AdbControl.Application.Workspace;
+using AdbControl.Core.Devices;
 using AdbControl.Infrastructure.Devices;
 using AdbControl.Infrastructure.Persistence;
 using AdbControl.Shell.ViewModels;
 using AdbControl.Shell.Views;
 using AdbControl.Tools.CommandLog;
+using AdbControl.Tools.Console;
 using AdbControl.Tools.Devices;
 using AdbControl.Tools.Home;
 using AdbControl.Tools.Library;
@@ -37,6 +40,9 @@ public partial class App : System.Windows.Application
         var deviceAliasStore = new DeviceAliasFileStore(storage.Paths);
         var deviceAliases = new DeviceAliasCatalog(deviceAliasStore);
         await deviceAliases.InitializeAsync();
+        var autoConnectStore = new AutoConnectDeviceFileStore(storage.Paths);
+        var autoConnectDevices = new AutoConnectDeviceCatalog(autoConnectStore);
+        await autoConnectDevices.InitializeAsync();
         var commandTraceStore = new CommandTraceFileStore(storage.Paths);
         var commandTraceJournal = new CommandTraceJournal(commandTraceStore);
         await commandTraceJournal.InitializeAsync();
@@ -47,6 +53,7 @@ public partial class App : System.Windows.Application
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
         var deviceActions = new AdbDeviceActionService(adbProcessRunner);
         IDeviceLogcatService deviceLogcat = new AdbLogcatService(adbProcessRunner, commandTraceJournal);
+        IAdbConsoleService adbConsole = new AdbConsoleService(adbProcessRunner);
         var deviceTop = new AdbTopService(adbProcessRunner);
 
         IToolModule[] modules =
@@ -54,6 +61,7 @@ public partial class App : System.Windows.Application
             new HomeToolModule(),
             new DevicesToolModule(),
             new ApkToolModule(),
+            new ConsoleToolModule(),
             new LogcatToolModule(),
             new TopToolModule(),
             new CommandLogToolModule(),
@@ -67,6 +75,7 @@ public partial class App : System.Windows.Application
             toolCatalog,
             deviceInventory,
             deviceAliases,
+            autoConnectDevices,
             apkLibrary,
             apkDeployment,
             apkDevicePackages,
@@ -74,6 +83,7 @@ public partial class App : System.Windows.Application
             adbConnection,
             deviceActions,
             deviceLogcat,
+            adbConsole,
             deviceTop,
             commandTraceJournal);
         workspace.EnsureStartupTabs();
@@ -81,11 +91,12 @@ public partial class App : System.Windows.Application
         var shellWindow = new ShellWindow
         {
             DataContext = new ShellViewModel(toolCatalog, workspace, deviceInventory, commandTraceJournal),
-            Icon = BitmapFrame.Create(new Uri("pack://application:,,,/AdbControl.App;component/Assets/icon_adb.ico", UriKind.Absolute))
+            Icon = BitmapFrame.Create(new Uri("pack://application:,,,/AdbControl;component/Assets/icon_adb.ico", UriKind.Absolute))
         };
 
         MainWindow = shellWindow;
         shellWindow.Show();
+        _ = TryAutoConnectOnStartupAsync(autoConnectDevices, adbConnection, deviceInventory, deviceAliases);
     }
 
     private static void RegisterCrashLogging(AppDataPaths paths)
@@ -132,6 +143,46 @@ public partial class App : System.Windows.Application
         foreach (var uri in modules.SelectMany(x => x.GetResourceDictionaryUris()))
         {
             Resources.MergedDictionaries.Add((ResourceDictionary)LoadComponent(uri));
+        }
+    }
+
+    private static async Task TryAutoConnectOnStartupAsync(
+        AutoConnectDeviceCatalog autoConnectDevices,
+        IAdbConnectionService adbConnection,
+        DeviceInventoryState deviceInventory,
+        DeviceAliasCatalog deviceAliases)
+    {
+        try
+        {
+            var endpoints = autoConnectDevices.GetEndpoints();
+            if (endpoints.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var endpoint in endpoints)
+            {
+                var result = await adbConnection.ConnectAsync(endpoint);
+                if (!result.IsSuccess)
+                {
+                    continue;
+                }
+
+                var alias = deviceAliases.GetAlias(endpoint);
+                deviceInventory.UpsertKnownDevices(
+                [
+                    new TvDeviceProfile(
+                        endpoint,
+                        string.IsNullOrWhiteSpace(alias) ? endpoint : alias,
+                        endpoint,
+                        DeviceConnectionKind.Network,
+                        DeviceReachability.Connected)
+                ]);
+            }
+        }
+        catch
+        {
+            // Startup auto-connect should never break shell launch.
         }
     }
 }

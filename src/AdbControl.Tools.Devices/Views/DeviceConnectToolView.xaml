@@ -18,6 +18,51 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="AutoConnectToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.Control}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.AccentPrimary}" />
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brush.AccentSoft}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsChecked" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid Margin="6"
@@ -105,15 +150,10 @@
                 Style="{DynamicResource PanelSurfaceStyle}">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Style="{DynamicResource Text.SectionTitleStyle}"
-                           Text="Найдено в сети" />
-
-                <ListBox Grid.Row="1"
-                         Margin="0,12,0,0"
+                <ListBox Margin="0,0,0,0"
                          ItemsSource="{Binding DiscoveredDevicesView}"
                          SelectionMode="Extended"
                          behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedCandidates}"
@@ -124,6 +164,7 @@
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="140" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
@@ -136,7 +177,21 @@
                                                Style="{StaticResource DiscoveredDeviceSecondaryTextStyle}"
                                                Text="{Binding SecondaryText}" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="1"
+
+                                <ToggleButton Grid.Column="1"
+                                              Margin="12,0,12,0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding IsAutoConnectEnabled, Mode=OneWay}"
+                                              ToolTip="{Binding AutoConnectToolTip}"
+                                              Command="{Binding DataContext.ToggleAutoConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              CommandParameter="{Binding Endpoint}"
+                                              Style="{StaticResource AutoConnectToggleButtonStyle}">
+                                    <TextBlock FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Text="↻" />
+                                </ToggleButton>
+
+                                <TextBlock Grid.Column="2"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"
                                            Style="{DynamicResource Text.CaptionStyle}"

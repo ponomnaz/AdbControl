@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdbControl.Tools.Apk", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdbControl.Tools.Logcat", "src\AdbControl.Tools.Logcat\AdbControl.Tools.Logcat.csproj", "{898DBD72-999B-45D4-9898-972AEECFAF3F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdbControl.Tools.Console", "src\AdbControl.Tools.Console\AdbControl.Tools.Console.csproj", "{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -183,6 +185,18 @@ Global
 		{898DBD72-999B-45D4-9898-972AEECFAF3F}.Release|x64.Build.0 = Release|Any CPU
 		{898DBD72-999B-45D4-9898-972AEECFAF3F}.Release|x86.ActiveCfg = Release|Any CPU
 		{898DBD72-999B-45D4-9898-972AEECFAF3F}.Release|x86.Build.0 = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|x64.Build.0 = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Debug|x86.Build.0 = Debug|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|x64.ActiveCfg = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|x64.Build.0 = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|x86.ActiveCfg = Release|Any CPU
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -200,5 +214,6 @@ Global
 		{09757B27-85CE-4ECA-8D52-594023212D60} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F316874E-7616-4809-857D-D476D787EF9A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{898DBD72-999B-45D4-9898-972AEECFAF3F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{9BAA3ED6-B3E2-466C-B10B-6F87E4BD9E51} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

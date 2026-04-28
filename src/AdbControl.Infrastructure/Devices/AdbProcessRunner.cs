@@ -6,6 +6,8 @@ namespace AdbControl.Infrastructure.Devices;
 
 public sealed class AdbProcessRunner
 {
+    private const int CanceledExitCode = -2;
+
     private readonly CommandTraceJournal _commandTraceJournal;
 
     public AdbProcessRunner(CommandTraceJournal commandTraceJournal)
@@ -19,7 +21,9 @@ public sealed class AdbProcessRunner
         Func<AdbProcessResult, bool>? isErrorEvaluator = null,
         bool recordInJournal = true)
     {
-        var commandText = $"adb {arguments}";
+        var commandText = string.IsNullOrWhiteSpace(arguments)
+            ? "adb"
+            : $"adb {arguments}";
 
         using var process = new Process
         {
@@ -54,31 +58,67 @@ public sealed class AdbProcessRunner
             return AdbProcessResult.NotStarted;
         }
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        var result = new AdbProcessResult(true, process.ExitCode, stdout, stderr);
-        var isError = isErrorEvaluator?.Invoke(result) ?? result.ExitCode != 0;
-
-        if (recordInJournal)
+        using var cancellationRegistration = cancellationToken.Register(() =>
         {
-            await _commandTraceJournal.RecordAsync(
-                new CommandTraceEntry(
-                    Guid.NewGuid(),
-                    DateTimeOffset.Now,
-                    commandText,
-                    stdout,
-                    stderr,
-                    process.ExitCode,
-                    isError),
-                cancellationToken);
-        }
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+                // Ignore kill failures during cancellation.
+            }
+        });
 
-        return result;
+        try
+        {
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            await process.WaitForExitAsync(cancellationToken);
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            var result = new AdbProcessResult(true, process.ExitCode, stdout, stderr);
+            var isError = isErrorEvaluator?.Invoke(result) ?? result.ExitCode != 0;
+
+            if (recordInJournal)
+            {
+                await _commandTraceJournal.RecordAsync(
+                    new CommandTraceEntry(
+                        Guid.NewGuid(),
+                        DateTimeOffset.Now,
+                        commandText,
+                        stdout,
+                        stderr,
+                        process.ExitCode,
+                        isError),
+                    cancellationToken);
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            if (recordInJournal)
+            {
+                await _commandTraceJournal.RecordAsync(
+                    new CommandTraceEntry(
+                        Guid.NewGuid(),
+                        DateTimeOffset.Now,
+                        commandText,
+                        string.Empty,
+                        "Операция отменена.",
+                        CanceledExitCode,
+                        true),
+                    CancellationToken.None);
+            }
+
+            return new AdbProcessResult(true, CanceledExitCode, string.Empty, "Операция отменена.");
+        }
     }
 }
 

@@ -4,6 +4,7 @@ using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Terminal;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
 
@@ -14,6 +15,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly ToolCatalog _toolCatalog;
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
+    private readonly AutoConnectDeviceCatalog _autoConnectDevices;
     private readonly IApkLibraryService _apkLibrary;
     private readonly IApkDeploymentService _apkDeployment;
     private readonly IApkDevicePackageService _apkDevicePackages;
@@ -21,6 +23,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
     private readonly IDeviceLogcatService _deviceLogcat;
+    private readonly IAdbConsoleService _adbConsole;
     private readonly IDeviceTopService _deviceTop;
     private readonly CommandTraceJournal _commandTraceJournal;
     private WorkspaceTab? _activeTab;
@@ -29,6 +32,7 @@ public sealed class WorkspaceService : ObservableObject
         ToolCatalog toolCatalog,
         DeviceInventoryState deviceInventory,
         DeviceAliasCatalog deviceAliases,
+        AutoConnectDeviceCatalog autoConnectDevices,
         IApkLibraryService apkLibrary,
         IApkDeploymentService apkDeployment,
         IApkDevicePackageService apkDevicePackages,
@@ -36,12 +40,14 @@ public sealed class WorkspaceService : ObservableObject
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
         IDeviceLogcatService deviceLogcat,
+        IAdbConsoleService adbConsole,
         IDeviceTopService deviceTop,
         CommandTraceJournal commandTraceJournal)
     {
         _toolCatalog = toolCatalog;
         _deviceInventory = deviceInventory;
         _deviceAliases = deviceAliases;
+        _autoConnectDevices = autoConnectDevices;
         _apkLibrary = apkLibrary;
         _apkDeployment = apkDeployment;
         _apkDevicePackages = apkDevicePackages;
@@ -49,6 +55,7 @@ public sealed class WorkspaceService : ObservableObject
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
         _deviceLogcat = deviceLogcat;
+        _adbConsole = adbConsole;
         _deviceTop = deviceTop;
         _commandTraceJournal = commandTraceJournal;
     }
@@ -106,24 +113,17 @@ public sealed class WorkspaceService : ObservableObject
             }
         }
 
-        var context = new ToolActivationContext(
-            _toolCatalog,
-            _deviceInventory,
-            _deviceAliases,
-            _apkLibrary,
-            _apkDeployment,
-            _apkDevicePackages,
-            _deviceDiscovery,
-            _adbConnection,
-            _deviceActions,
-            _deviceLogcat,
-            _deviceTop,
-            _commandTraceJournal,
-            OpenTool);
-        var contentViewModel = registration.CreateContentViewModel(context);
+        var contentViewModel = CreateToolContentViewModel(registration);
         var tab = new WorkspaceTab(registration, contentViewModel);
         Tabs.Add(tab);
         ActiveTab = tab;
+    }
+
+    public DetachedToolContent CreateDetachedToolContent(string toolId)
+    {
+        var registration = _toolCatalog.GetRequired(toolId);
+        var contentViewModel = CreateToolContentViewModel(registration);
+        return new DetachedToolContent(registration, contentViewModel);
     }
 
     public void CloseTab(WorkspaceTab? tab)
@@ -150,5 +150,27 @@ public sealed class WorkspaceService : ObservableObject
         {
             ActiveTab = Tabs.ElementAtOrDefault(Math.Min(index, Tabs.Count - 1));
         }
+    }
+
+    private object CreateToolContentViewModel(ToolRegistration registration)
+    {
+        var context = new ToolActivationContext(
+            _toolCatalog,
+            _deviceInventory,
+            _deviceAliases,
+            _autoConnectDevices,
+            _apkLibrary,
+            _apkDeployment,
+            _apkDevicePackages,
+            _deviceDiscovery,
+            _adbConnection,
+            _deviceActions,
+            _deviceLogcat,
+            _adbConsole,
+            _deviceTop,
+            _commandTraceJournal,
+            OpenTool);
+
+        return registration.CreateContentViewModel(context);
     }
 }

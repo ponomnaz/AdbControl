@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>AdbControl.Uninstall</AssemblyName>
+    <RootNamespace>AdbControl.UninstallHost</RootNamespace>
+    <ApplicationIcon>..\..\..\assets\icons\icon_adb.ico</ApplicationIcon>
+    <Product>AdbControl Uninstall</Product>
+    <Company>ponomnaz</Company>
+    <Version>0.1.0</Version>
+    <ProductCode></ProductCode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="AdbControlProductCode" Value="$(ProductCode)" />
+  </ItemGroup>
+</Project>

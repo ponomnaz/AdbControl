@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>AdbControl.Setup</AssemblyName>
+    <RootNamespace>AdbControl.SetupHost</RootNamespace>
+    <ApplicationIcon>..\..\..\assets\icons\icon_adb.ico</ApplicationIcon>
+    <Product>AdbControl Setup</Product>
+    <Company>ponomnaz</Company>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\..\assets\icons\icon_adb.png" Link="Assets\icon_adb.png" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MsiPayloadPath)' != '' and Exists('$(MsiPayloadPath)')">
+    <EmbeddedResource Include="$(MsiPayloadPath)" LogicalName="AdbControl.SetupHost.Payload.AdbControl.Setup.msi" />
+  </ItemGroup>
+</Project>

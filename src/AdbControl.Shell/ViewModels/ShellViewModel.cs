@@ -77,6 +77,11 @@ public sealed class ShellViewModel : ObservableObject
     public string ActivitySummary =>
         "Фоновые операции и логи пока не добавлены.";
 
+    public DetachedToolContent CreateDetachedToolContent(string toolId)
+    {
+        return _workspace.CreateDetachedToolContent(toolId);
+    }
+
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(WorkspaceSummary));

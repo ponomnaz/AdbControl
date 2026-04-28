@@ -1,0 +1,34 @@
+<Project Sdk="WixToolset.Sdk/6.0.0">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <InstallerPlatform Condition="'$(InstallerPlatform)' == ''">x64</InstallerPlatform>
+    <InstallerVersion Condition="'$(InstallerVersion)' == ''">0.1.0</InstallerVersion>
+    <Cultures>ru-RU</Cultures>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\artifacts\publish\installer\win-x64\</PublishDir>
+    <OutputName Condition="'$(OutputName)' == ''">AdbControl.Package</OutputName>
+    <DefineConstants>
+      InstallerVersion=$(InstallerVersion);
+      ProductName=AdbControl;
+      Manufacturer=ponomnaz;
+      AppIconPath=$(MSBuildThisFileDirectory)..\..\..\assets\icons\icon_adb.ico
+    </DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <BindPath Include="$(PublishDir)" BindName="PublishDir" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Package.wxs" />
+    <Compile Include="InstallerUI.wxs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Package.ru-RU.wxl" />
+  </ItemGroup>
+</Project>

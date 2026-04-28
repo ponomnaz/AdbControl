@@ -2,6 +2,7 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Terminal;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
 
@@ -11,6 +12,7 @@ public sealed record ToolActivationContext(
     ToolCatalog ToolCatalog,
     DeviceInventoryState DeviceInventory,
     DeviceAliasCatalog DeviceAliases,
+    AutoConnectDeviceCatalog AutoConnectDevices,
     IApkLibraryService ApkLibrary,
     IApkDeploymentService ApkDeployment,
     IApkDevicePackageService ApkDevicePackages,
@@ -18,6 +20,7 @@ public sealed record ToolActivationContext(
     IAdbConnectionService AdbConnection,
     IDeviceActionService DeviceActions,
     IDeviceLogcatService DeviceLogcat,
+    IAdbConsoleService AdbConsole,
     IDeviceTopService DeviceTop,
     CommandTraceJournal CommandTraceJournal,
     Action<string> OpenTool);

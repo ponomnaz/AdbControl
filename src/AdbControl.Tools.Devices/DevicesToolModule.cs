@@ -43,7 +43,12 @@ public sealed class DevicesToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "+",
                 SortOrder: 10),
-            context => new DeviceConnectToolViewModel(context.DeviceInventory, context.DeviceDiscovery, context.AdbConnection, context.DeviceAliases),
+            context => new DeviceConnectToolViewModel(
+                context.DeviceInventory,
+                context.DeviceDiscovery,
+                context.AdbConnection,
+                context.DeviceAliases,
+                context.AutoConnectDevices),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);

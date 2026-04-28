@@ -85,6 +85,28 @@ Get-Process AdbControl.App -ErrorAction SilentlyContinue | Stop-Process -Force
 - [local/installer.md](local/installer.md) — заметки по installer / uninstall
 - [assets/README.md](assets/README.md) — куда класть иконки и другие ассеты
 
+## Installer
+
+Сборка инсталлера:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1
+```
+
+Открыть мастер установки сразу после сборки:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -OpenMsi
+```
+
+Если нужен мастер с выбором папки установки и ярлыка на рабочем столе, открывай:
+
+```text
+artifacts\installer\win-x64\AdbControl.Setup.msi
+```
+
+`setup.exe` больше не нужен для обычной установки и не является основным сценарием.
+
 ## Ограничения текущего состояния
 
 - автоматических тестов пока нет

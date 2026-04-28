@@ -15,9 +15,11 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private readonly IDeviceDiscoveryService _deviceDiscoveryService;
     private readonly IAdbConnectionService _adbConnectionService;
     private readonly DeviceAliasCatalog _deviceAliases;
+    private readonly AutoConnectDeviceCatalog _autoConnectDevices;
     private bool _isScanning;
     private bool _isConnecting;
     private bool _isDisconnecting;
+    private bool _isTogglingAutoConnect;
     private string _statusText = string.Empty;
     private string _endpointInput = string.Empty;
 
@@ -25,19 +27,21 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         DeviceInventoryState deviceInventory,
         IDeviceDiscoveryService deviceDiscoveryService,
         IAdbConnectionService adbConnectionService,
-        DeviceAliasCatalog deviceAliases)
+        DeviceAliasCatalog deviceAliases,
+        AutoConnectDeviceCatalog autoConnectDevices)
     {
         _deviceInventory = deviceInventory;
         _deviceDiscoveryService = deviceDiscoveryService;
         _adbConnectionService = adbConnectionService;
         _deviceAliases = deviceAliases;
+        _autoConnectDevices = autoConnectDevices;
 
         DiscoveredDevicesView = CollectionViewSource.GetDefaultView(DiscoveredDevices);
         DiscoveredDevicesView.Filter = FilterDiscoveredDevice;
 
         RefreshCommand = new RelayCommand(
             () => _ = RefreshAsync(),
-            () => !_isScanning && !_isConnecting && !_isDisconnecting);
+            () => !_isScanning && !_isConnecting && !_isDisconnecting && !_isTogglingAutoConnect);
 
         ConnectSelectedCommand = new RelayCommand(
             () => _ = ConnectSelectedAsync(),
@@ -51,11 +55,15 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             () => _ = DisconnectSelectedAsync(),
             () => CanDisconnectSelected());
 
+        ToggleAutoConnectCommand = new RelayCommand<string>(
+            endpoint => _ = ToggleAutoConnectAsync(endpoint),
+            endpoint => CanToggleAutoConnect(endpoint));
+
         DiscoveredDevices.CollectionChanged += OnDiscoveredDevicesChanged;
         SelectedCandidates.CollectionChanged += OnSelectedCandidatesChanged;
         _deviceInventory.KnownDevices.CollectionChanged += OnKnownDevicesChanged;
         _deviceAliases.Changed += OnAliasesChanged;
-
+        _autoConnectDevices.Changed += OnAutoConnectCatalogChanged;
         _ = RefreshAsync();
     }
 
@@ -72,6 +80,8 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public RelayCommand ConnectManualCommand { get; }
 
     public RelayCommand DisconnectSelectedCommand { get; }
+
+    public RelayCommand<string> ToggleAutoConnectCommand { get; }
 
     public string StatusText
     {
@@ -134,6 +144,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
                     IsConnected(endpoint) ? "Уже подключено" : "Готово"));
             }
 
+            RefreshAutoConnectFlags();
             StatusText = string.Empty;
         }
         catch (Exception ex)
@@ -293,6 +304,36 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         }
     }
 
+    private async Task ToggleAutoConnectAsync(string? endpoint)
+    {
+        if (!CanToggleAutoConnect(endpoint))
+        {
+            return;
+        }
+
+        try
+        {
+            _isTogglingAutoConnect = true;
+            NotifyCommandStateChanged();
+
+            var isEnabled = !_autoConnectDevices.Contains(endpoint);
+            await _autoConnectDevices.SetEnabledAsync(endpoint!, isEnabled);
+
+            StatusText = isEnabled
+                ? "Будет подключаться при запуске"
+                : "Убрано из автоподключения";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            _isTogglingAutoConnect = false;
+            NotifyCommandStateChanged();
+        }
+    }
+
     private async Task<List<TvDeviceProfile>> ConnectEndpointsAsync(IReadOnlyList<ConnectRequest> requests)
     {
         var connectedDevices = new List<TvDeviceProfile>();
@@ -433,6 +474,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         ConnectSelectedCommand.NotifyCanExecuteChanged();
         ConnectManualCommand.NotifyCanExecuteChanged();
         DisconnectSelectedCommand.NotifyCanExecuteChanged();
+        ToggleAutoConnectCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(DiscoverySummary));
         OnPropertyChanged(nameof(SelectionSummary));
     }
@@ -442,6 +484,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         return !_isScanning &&
                !_isConnecting &&
                !_isDisconnecting &&
+               !_isTogglingAutoConnect &&
                TryNormalizeEndpoint(EndpointInput, out _);
     }
 
@@ -450,6 +493,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         return !_isScanning &&
                !_isConnecting &&
                !_isDisconnecting &&
+               !_isTogglingAutoConnect &&
                SelectedCandidates.Any(x => !IsConnected(x.Endpoint));
     }
 
@@ -458,7 +502,17 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         return !_isScanning &&
                !_isConnecting &&
                !_isDisconnecting &&
+               !_isTogglingAutoConnect &&
                SelectedCandidates.Any(x => IsConnected(x.Endpoint));
+    }
+
+    private bool CanToggleAutoConnect(string? endpoint)
+    {
+        return !_isScanning &&
+               !_isConnecting &&
+               !_isDisconnecting &&
+               !_isTogglingAutoConnect &&
+               !string.IsNullOrWhiteSpace(endpoint);
     }
 
     private void EnsureVisibleEndpoint(string endpoint)
@@ -529,7 +583,16 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     {
         var item = new DiscoveredDeviceItemViewModel(endpoint, status);
         item.ApplyAlias(_deviceAliases.GetAlias(endpoint));
+        item.IsAutoConnectEnabled = _autoConnectDevices.Contains(endpoint);
         return item;
+    }
+
+    private void RefreshAutoConnectFlags()
+    {
+        foreach (var item in DiscoveredDevices)
+        {
+            item.IsAutoConnectEnabled = _autoConnectDevices.Contains(item.Endpoint);
+        }
     }
 
     private void OnAliasesChanged(object? sender, EventArgs e)
@@ -539,7 +602,14 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             item.ApplyAlias(_deviceAliases.GetAlias(item.Endpoint));
         }
 
+        RefreshAutoConnectFlags();
         DiscoveredDevicesView.Refresh();
+    }
+
+    private void OnAutoConnectCatalogChanged(object? sender, EventArgs e)
+    {
+        RefreshAutoConnectFlags();
+        NotifyCommandStateChanged();
     }
 }
 
@@ -551,6 +621,7 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     private string _title;
     private string _secondaryText = string.Empty;
     private bool _hasSecondaryText;
+    private bool _isAutoConnectEnabled;
 
     public DiscoveredDeviceItemViewModel(string endpoint, string status)
     {
@@ -592,6 +663,22 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
         get => _status;
         set => SetProperty(ref _status, value);
     }
+
+    public bool IsAutoConnectEnabled
+    {
+        get => _isAutoConnectEnabled;
+        set
+        {
+            if (SetProperty(ref _isAutoConnectEnabled, value))
+            {
+                OnPropertyChanged(nameof(AutoConnectToolTip));
+            }
+        }
+    }
+
+    public string AutoConnectToolTip => IsAutoConnectEnabled
+        ? "Не подключать при запуске"
+        : "Подключать при запуске";
 
     public void ApplyAlias(string? alias)
     {

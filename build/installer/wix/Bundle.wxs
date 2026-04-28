@@ -1,0 +1,28 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle
+      Name="$(BundleName)"
+      Manufacturer="$(Manufacturer)"
+      Version="$(BundleVersion)"
+      UpgradeCode="{0B8AB70B-5864-4958-B16E-829B88974D00}"
+      IconSourceFile="$(BundleIconPath)"
+      SplashScreenSourceFile="$(SplashScreenPath)"
+      DisableModify="button"
+      Compressed="yes">
+
+    <BootstrapperApplication>
+      <bal:WixInternalUIBootstrapperApplication
+          Theme="standard"
+          LogoFile="$(BundleLogoPath)"
+          LocalizationFile="$(BundleLocalizationPath)" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage
+          Id="AdbControlMsi"
+          SourceFile="!(bindpath.InstallerMsi)\AdbControl.Package.msi"
+          bal:DisplayInternalUICondition="1"
+          Visible="no" />
+    </Chain>
+  </Bundle>
+</Wix>
