@@ -93,6 +93,7 @@
                         <TextBox x:Name="CommandInputTextBox"
                                  Grid.Column="1"
                                  Margin="8,0,0,0"
+                                 ToolTip="Команда adb"
                                  VerticalContentAlignment="Center"
                                  PreviewKeyDown="OnCommandInputPreviewKeyDown"
                                  Style="{StaticResource ConsoleInputTextBoxStyle}"
@@ -100,15 +101,15 @@
 
                         <Button Grid.Column="2"
                                 Margin="8,0,0,0"
-                                Command="{Binding StopCommand}"
-                                Content="Стоп"
-                                Style="{DynamicResource DangerButtonStyle}" />
-
-                        <Button Grid.Column="3"
-                                Margin="8,0,0,0"
                                 Command="{Binding ClearOutputCommand}"
                                 Content="Очистить"
                                 Style="{DynamicResource SecondaryButtonStyle}" />
+
+                        <Button Grid.Column="3"
+                                Margin="8,0,0,0"
+                                Command="{Binding StopCommand}"
+                                Content="Стоп"
+                                Style="{DynamicResource DangerButtonStyle}" />
                     </Grid>
                 </Border>
             </Grid>

@@ -23,13 +23,27 @@ public partial class ShellWindow
         var detachedTool = shellViewModel.CreateDetachedToolContent(navigationItem.Id);
         var window = new DetachedToolWindow
         {
-            Owner = this,
             Title = detachedTool.Registration.Tool.Title,
             DataContext = detachedTool.ContentViewModel,
             Icon = Icon
         };
 
+        PositionDetachedWindow(window);
         window.Show();
         e.Handled = true;
+    }
+
+    private void PositionDetachedWindow(Window window)
+    {
+        var sourceLeft = Left;
+        var sourceTop = Top;
+        var sourceWidth = ActualWidth > 0 ? ActualWidth : Width;
+        var sourceHeight = ActualHeight > 0 ? ActualHeight : Height;
+
+        var targetWidth = window.Width;
+        var targetHeight = window.Height;
+
+        window.Left = Math.Max(0, sourceLeft + ((sourceWidth - targetWidth) / 2d) + 28d);
+        window.Top = Math.Max(0, sourceTop + ((sourceHeight - targetHeight) / 2d) + 28d);
     }
 }

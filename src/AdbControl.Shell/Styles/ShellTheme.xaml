@@ -7,6 +7,7 @@
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Panels.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Buttons.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Inputs.xaml" />
+        <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Menus.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Lists.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Tabs.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Icons.xaml" />

@@ -29,6 +29,20 @@ public partial class DevicesToolView
         });
     }
 
+    private void OnAliasEditorIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        textBox.Dispatcher.BeginInvoke(() =>
+        {
+            textBox.Focus();
+            textBox.SelectAll();
+        });
+    }
+
     private void OnAliasEditorLostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is not TextBox textBox ||
@@ -88,8 +102,21 @@ public partial class DevicesToolView
             return;
         }
 
-        ClearSelectionsIfNeeded(e.OriginalSource as DependencyObject);
         viewModel.CancelActiveAliasEdit();
+    }
+
+    private void OnRenameMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Parent: ContextMenu { PlacementTarget: FrameworkElement { DataContext: KnownDeviceRowViewModel row } } } ||
+            DataContext is not DevicesToolViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.BeginEditAliasCommand.CanExecute(row))
+        {
+            viewModel.BeginEditAliasCommand.Execute(row);
+        }
     }
 
     private static bool IsInsideAliasEditor(DependencyObject? source)
@@ -97,35 +124,6 @@ public partial class DevicesToolView
         for (var current = source; current is not null; current = GetParentElement(current))
         {
             if (current is TextBox { DataContext: KnownDeviceRowViewModel { IsEditingAlias: true } })
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void ClearSelectionsIfNeeded(DependencyObject? source)
-    {
-        if (source is null || ShouldKeepSelection(source))
-        {
-            return;
-        }
-
-        foreach (var listBox in FindVisualChildren<ListBox>(this))
-        {
-            if (listBox.SelectedItems.Count > 0)
-            {
-                listBox.UnselectAll();
-            }
-        }
-    }
-
-    private bool ShouldKeepSelection(DependencyObject source)
-    {
-        for (var current = source; current is not null && !ReferenceEquals(current, this); current = GetParentElement(current))
-        {
-            if (current is ListBoxItem or ScrollBar or ButtonBase or TextBoxBase or Selector or TabItem)
             {
                 return true;
             }
@@ -145,22 +143,4 @@ public partial class DevicesToolView
         };
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var childrenCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < childrenCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T target)
-            {
-                yield return target;
-            }
-
-            foreach (var nested in FindVisualChildren<T>(child))
-            {
-                yield return nested;
-            }
-        }
-    }
 }

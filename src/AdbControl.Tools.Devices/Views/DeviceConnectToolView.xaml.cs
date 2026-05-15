@@ -1,9 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Media3D;
+using AdbControl.Tools.Devices.ViewModels;
 
 namespace AdbControl.Tools.Devices.Views;
 
@@ -14,67 +12,92 @@ public partial class DeviceConnectToolView
         InitializeComponent();
     }
 
-    private void OnRootPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    private void OnAliasEditorLoaded(object sender, RoutedEventArgs e)
     {
-        ClearSelectionsIfNeeded(e.OriginalSource as DependencyObject);
-    }
-
-    private void ClearSelectionsIfNeeded(DependencyObject? source)
-    {
-        if (source is null || ShouldKeepSelection(source))
+        if (sender is not TextBox textBox)
         {
             return;
         }
 
-        foreach (var listBox in FindVisualChildren<ListBox>(this))
+        textBox.Dispatcher.BeginInvoke(() =>
         {
-            if (listBox.SelectedItems.Count > 0)
-            {
-                listBox.UnselectAll();
-            }
+            textBox.Focus();
+            textBox.SelectAll();
+        });
+    }
+
+    private void OnAliasEditorIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        textBox.Dispatcher.BeginInvoke(() =>
+        {
+            textBox.Focus();
+            textBox.SelectAll();
+        });
+    }
+
+    private void OnAliasEditorLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            textBox.DataContext is not DiscoveredDeviceItemViewModel row ||
+            !row.IsEditingAlias ||
+            DataContext is not DeviceConnectToolViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.CancelAliasCommand.CanExecute(row))
+        {
+            viewModel.CancelAliasCommand.Execute(row);
         }
     }
 
-    private bool ShouldKeepSelection(DependencyObject source)
+    private void OnAliasEditorKeyDown(object sender, KeyEventArgs e)
     {
-        for (var current = source; current is not null && !ReferenceEquals(current, this); current = GetParentElement(current))
+        if (sender is not TextBox textBox ||
+            textBox.DataContext is not DiscoveredDeviceItemViewModel row ||
+            DataContext is not DeviceConnectToolViewModel viewModel)
         {
-            if (current is ListBoxItem or ScrollBar or ButtonBase or TextBoxBase or Selector or TabItem)
-            {
-                return true;
-            }
+            return;
         }
 
-        return false;
-    }
-
-    private static DependencyObject? GetParentElement(DependencyObject current)
-    {
-        return current switch
+        if (e.Key == Key.Enter)
         {
-            Visual or Visual3D => VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current),
-            FrameworkContentElement frameworkContentElement => frameworkContentElement.Parent ?? LogicalTreeHelper.GetParent(frameworkContentElement),
-            ContentElement contentElement => ContentOperations.GetParent(contentElement) ?? LogicalTreeHelper.GetParent(contentElement),
-            _ => LogicalTreeHelper.GetParent(current)
-        };
-    }
-
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var childrenCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < childrenCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T target)
+            if (viewModel.SaveAliasCommand.CanExecute(row))
             {
-                yield return target;
+                viewModel.SaveAliasCommand.Execute(row);
             }
 
-            foreach (var nested in FindVisualChildren<T>(child))
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            if (viewModel.CancelAliasCommand.CanExecute(row))
             {
-                yield return nested;
+                viewModel.CancelAliasCommand.Execute(row);
             }
+
+            e.Handled = true;
+        }
+    }
+
+    private void OnRenameMenuItemClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Parent: ContextMenu { PlacementTarget: FrameworkElement { DataContext: DiscoveredDeviceItemViewModel row } } } ||
+            DataContext is not DeviceConnectToolViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.BeginEditAliasCommand.CanExecute(row))
+        {
+            viewModel.BeginEditAliasCommand.Execute(row);
         }
     }
 }

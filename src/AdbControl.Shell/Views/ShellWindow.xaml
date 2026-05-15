@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="AdbControl"
-        Width="1080"
-        Height="720"
-        MinWidth="960"
-        MinHeight="620"
+        Width="1020"
+        Height="680"
+        MinWidth="820"
+        MinHeight="520"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display"
@@ -17,7 +17,7 @@
         WindowStartupLocation="CenterScreen">
     <Grid Background="{DynamicResource Brush.BackgroundPrimary}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="196" />
+            <ColumnDefinition Width="184" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -43,8 +43,10 @@
                                Text="Управление Android TV по ADB." />
                 </StackPanel>
 
-                <StackPanel Grid.Row="1"
-                            Margin="0,20,0,0">
+                <ScrollViewer Grid.Row="1"
+                              Margin="0,20,0,0"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding NavigationItems}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -99,7 +101,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </StackPanel>
+                </ScrollViewer>
             </Grid>
         </Border>
 

@@ -49,8 +49,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="6"
-          PreviewMouseDown="OnRootPreviewMouseDown">
+    <Grid Margin="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -90,7 +89,7 @@
                     <Button Margin="0,0,8,0"
                             VerticalAlignment="Center"
                             Command="{Binding DeleteSelectedCommand}"
-                            Content="Удалить выбранные"
+                            Content="Удалить выбранную"
                             Style="{DynamicResource SecondaryButtonStyle}" />
                     <Button Command="{Binding ClearAllCommand}"
                             VerticalAlignment="Center"
@@ -121,7 +120,7 @@
                     <ListBox Grid.Row="1"
                              Margin="0,8,0,0"
                              ItemsSource="{Binding VisibleEntries}"
-                             SelectionMode="Extended"
+                             SelectionMode="Single"
                              behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedEntries}"
                              Style="{StaticResource CommandLogListBoxStyle}"
                              ItemContainerStyle="{StaticResource CommandLogEntryListBoxItemStyle}">

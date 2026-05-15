@@ -28,6 +28,20 @@ public sealed class AdbDeviceActionService : IDeviceActionService
         return RunAsync(devices, endpoint => $"-s {endpoint} shell am force-stop {NetariumPackageName}", cancellationToken);
     }
 
+    public Task<DeviceActionBatchResult> ConfigureNetariumServerAsync(
+        IReadOnlyList<TvDeviceProfile> devices,
+        string serverEndpoint,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedServerEndpoint = NormalizeServerEndpoint(serverEndpoint)
+            ?? throw new ArgumentException("Server endpoint is required.", nameof(serverEndpoint));
+
+        return RunAsync(
+            devices,
+            endpoint => $"-s {endpoint} shell am broadcast -a cs.netarium.config --es SERVER \"{normalizedServerEndpoint}\" {NetariumPackageName}",
+            cancellationToken);
+    }
+
     private async Task<DeviceActionBatchResult> RunAsync(
         IReadOnlyList<TvDeviceProfile> devices,
         Func<string, string> argumentsFactory,
@@ -62,5 +76,13 @@ public sealed class AdbDeviceActionService : IDeviceActionService
     {
         var result = await _adbProcessRunner.RunAsync(arguments, cancellationToken);
         return result.Started && result.ExitCode == 0;
+    }
+
+    private static string? NormalizeServerEndpoint(string? serverEndpoint)
+    {
+        var normalizedEndpoint = NetariumServerEndpointCatalog.NormalizeEndpoint(serverEndpoint);
+        return string.IsNullOrWhiteSpace(normalizedEndpoint)
+            ? null
+            : $"tcp://{normalizedEndpoint}";
     }
 }

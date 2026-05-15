@@ -15,6 +15,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly ToolCatalog _toolCatalog;
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
+    private readonly NetariumServerEndpointCatalog _netariumServerEndpoint;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
     private readonly IApkLibraryService _apkLibrary;
     private readonly IApkDeploymentService _apkDeployment;
@@ -32,6 +33,7 @@ public sealed class WorkspaceService : ObservableObject
         ToolCatalog toolCatalog,
         DeviceInventoryState deviceInventory,
         DeviceAliasCatalog deviceAliases,
+        NetariumServerEndpointCatalog netariumServerEndpoint,
         AutoConnectDeviceCatalog autoConnectDevices,
         IApkLibraryService apkLibrary,
         IApkDeploymentService apkDeployment,
@@ -47,6 +49,7 @@ public sealed class WorkspaceService : ObservableObject
         _toolCatalog = toolCatalog;
         _deviceInventory = deviceInventory;
         _deviceAliases = deviceAliases;
+        _netariumServerEndpoint = netariumServerEndpoint;
         _autoConnectDevices = autoConnectDevices;
         _apkLibrary = apkLibrary;
         _apkDeployment = apkDeployment;
@@ -158,6 +161,7 @@ public sealed class WorkspaceService : ObservableObject
             _toolCatalog,
             _deviceInventory,
             _deviceAliases,
+            _netariumServerEndpoint,
             _autoConnectDevices,
             _apkLibrary,
             _apkDeployment,

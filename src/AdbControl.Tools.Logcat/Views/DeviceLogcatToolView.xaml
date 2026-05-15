@@ -19,6 +19,14 @@
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="FontSize" Value="13" />
         </Style>
+
+        <ToolTip x:Key="LogcatFilterToolTip"
+                 Placement="Bottom"
+                 ToolTipService.InitialShowDelay="150"
+                 ToolTipService.ShowDuration="20000">
+            <TextBlock MaxWidth="260"
+                       Text="Аргументы adb logcat." />
+        </ToolTip>
     </UserControl.Resources>
 
     <Grid Margin="6">
@@ -55,65 +63,59 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1"
-                                Margin="16,0,0,0"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Bottom">
+                    <WrapPanel Grid.Column="1"
+                               Margin="16,0,0,0"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Bottom">
                         <ComboBox Width="220"
-                                  Margin="0,0,8,0"
+                                  Margin="0,0,8,8"
                                   Style="{DynamicResource CompactComboBoxInputStyle}"
                                   ItemsSource="{Binding ConnectedDevices}"
                                   SelectedItem="{Binding SelectedDevice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   DisplayMemberPath="DisplayText" />
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding StartCommand}"
-                                Content="Старт"
-                                Style="{DynamicResource PrimaryButtonStyle}" />
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding StopCommand}"
-                                Content="Стоп"
-                                Style="{DynamicResource DangerButtonStyle}" />
-                        <Button Margin="0,0,8,0"
+                        <Button Margin="0,0,8,8"
                                 Command="{Binding ClearScreenCommand}"
                                 Content="Очистить экран"
                                 Style="{DynamicResource SecondaryButtonStyle}" />
-                        <Button Command="{Binding ClearBufferCommand}"
+                        <Button Margin="0,0,8,8"
+                                Command="{Binding ClearBufferCommand}"
                                 Content="Очистить буфер"
                                 Style="{DynamicResource SecondaryButtonStyle}" />
-                    </StackPanel>
+                        <Button Margin="0,0,8,8"
+                                Command="{Binding StartCommand}"
+                                Content="Старт"
+                                Style="{DynamicResource PrimaryButtonStyle}" />
+                        <Button Margin="0,0,0,8"
+                                Command="{Binding StopCommand}"
+                                Content="Стоп"
+                                Style="{DynamicResource DangerButtonStyle}" />
+                    </WrapPanel>
                 </Grid>
 
-                <Grid Grid.Row="1"
-                      Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="260" />
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock VerticalAlignment="Center"
+                <WrapPanel Grid.Row="1"
+                           Margin="0,8,0,0">
+                    <TextBlock Margin="0,6,8,0"
+                               VerticalAlignment="Center"
                                Style="{DynamicResource Text.CaptionStyle}"
                                Text="Фильтр" />
 
-                    <TextBox Grid.Column="1"
-                             Margin="8,0,0,0"
+                    <TextBox Width="280"
+                             Margin="0,0,12,8"
                              Style="{DynamicResource TextBoxInputStyle}"
                              Text="{Binding FilterArguments, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Например: ActivityManager:I *:S" />
+                             ToolTip="{StaticResource LogcatFilterToolTip}" />
 
-                    <TextBlock Grid.Column="3"
+                    <TextBlock Margin="0,6,8,0"
                                VerticalAlignment="Center"
                                Style="{DynamicResource Text.CaptionStyle}"
                                Text="Поиск" />
 
-                    <TextBox Grid.Column="4"
-                             Margin="8,0,0,0"
+                    <TextBox Width="240"
+                             Margin="0,0,0,8"
                              Style="{DynamicResource TextBoxInputStyle}"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Поиск по уже показанным строкам" />
-                </Grid>
+                </WrapPanel>
             </Grid>
         </Border>
 

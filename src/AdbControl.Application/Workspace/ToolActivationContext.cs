@@ -12,6 +12,7 @@ public sealed record ToolActivationContext(
     ToolCatalog ToolCatalog,
     DeviceInventoryState DeviceInventory,
     DeviceAliasCatalog DeviceAliases,
+    NetariumServerEndpointCatalog NetariumServerEndpoint,
     AutoConnectDeviceCatalog AutoConnectDevices,
     IApkLibraryService ApkLibrary,
     IApkDeploymentService ApkDeployment,

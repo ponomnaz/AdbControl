@@ -27,7 +27,11 @@ public sealed class DevicesToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "TV",
                 SortOrder: 0),
-            context => new DevicesToolViewModel(context.DeviceInventory, context.DeviceActions, context.DeviceAliases),
+            context => new DevicesToolViewModel(
+                context.DeviceInventory,
+                context.DeviceActions,
+                context.DeviceAliases,
+                context.NetariumServerEndpoint),
             ShowInNavigation: true,
             OpenOnStartup: true,
             ReuseExistingTab: true);

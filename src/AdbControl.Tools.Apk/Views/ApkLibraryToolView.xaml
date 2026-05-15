@@ -95,37 +95,6 @@
             </Setter>
         </Style>
 
-        <Style x:Key="TargetDeviceListBoxItemStyle" TargetType="ListBoxItem">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="8,6" />
-            <Setter Property="Margin" Value="0,0,0,4" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Root"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Card}">
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="ApkModeTabItemStyle" TargetType="TabItem">
             <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
             <Setter Property="Template">
@@ -197,8 +166,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="6"
-          PreviewMouseDown="OnRootPreviewMouseDown">
+    <Grid Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="19*" />
                 <ColumnDefinition Width="21*" />
@@ -229,12 +197,12 @@
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
                             <Button Margin="0,0,8,0"
-                                    Command="{Binding DeleteSelectedCommand}"
-                                    Content="Удалить выбранные"
-                                    Style="{DynamicResource DangerButtonStyle}" />
-                            <Button Command="{Binding InstallSelectedCommand}"
+                                    Command="{Binding InstallSelectedCommand}"
                                     Content="Установить"
                                     Style="{DynamicResource PrimaryButtonStyle}" />
+                            <Button Command="{Binding DeleteSelectedCommand}"
+                                    Content="Удалить выбранные"
+                                    Style="{DynamicResource DangerButtonStyle}" />
                         </StackPanel>
                     </Grid>
 
@@ -353,6 +321,7 @@
 
                     <Border Grid.Row="1"
                             Margin="0,8,0,0"
+                            Height="120"
                             Style="{StaticResource RightPanelDraftSurfaceStyle}">
                         <Grid>
                             <TextBlock HorizontalAlignment="Center"
@@ -370,11 +339,11 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <ListBox MaxHeight="132"
+                            <ListBox Height="84"
                                      ItemsSource="{Binding ConnectedDevices}"
                                      SelectionMode="Extended"
                                      behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedTargetDevices}"
-                                     ItemContainerStyle="{StaticResource TargetDeviceListBoxItemStyle}">
+                                     ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
                                 <ListBox.Style>
                                     <Style TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
                                         <Style.Triggers>
@@ -551,7 +520,7 @@
                                     <TextBox Grid.Column="0"
                                              Style="{DynamicResource TextBoxInputStyle}"
                                              Text="{Binding PackageSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="Поиск по package name" />
+                                             ToolTip="Имя пакета" />
 
                                     <Button Grid.Column="2"
                                             Command="{Binding RefreshPackagesCommand}"

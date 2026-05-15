@@ -11,21 +11,27 @@ public sealed class DevicesToolViewModel : ObservableObject
     private readonly DeviceInventoryState _deviceInventory;
     private readonly IDeviceActionService _deviceActionService;
     private readonly DeviceAliasCatalog _deviceAliases;
+    private readonly NetariumServerEndpointCatalog _netariumServerEndpoint;
     private bool _isRefreshingSelection;
+    private string _serverEndpoint;
     private string _statusText = "Готово";
 
     public DevicesToolViewModel(
         DeviceInventoryState deviceInventory,
         IDeviceActionService deviceActionService,
-        DeviceAliasCatalog deviceAliases)
+        DeviceAliasCatalog deviceAliases,
+        NetariumServerEndpointCatalog netariumServerEndpoint)
     {
         _deviceInventory = deviceInventory;
         _deviceActionService = deviceActionService;
         _deviceAliases = deviceAliases;
+        _netariumServerEndpoint = netariumServerEndpoint;
+        _serverEndpoint = netariumServerEndpoint.Endpoint;
 
         PowerCommand = new RelayCommand(() => _ = TogglePowerAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
         RebootCommand = new RelayCommand(() => _ = RebootAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
         StopCommand = new RelayCommand(() => _ = ForceStopAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
+        ApplyServerCommand = new RelayCommand(() => _ = ApplyServerAsync(), CanApplyServer);
         BeginEditAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(BeginEditAlias);
         SaveAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(row => _ = SaveAliasAsync(row));
         CancelAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(CancelAliasEdit);
@@ -34,6 +40,7 @@ public sealed class DevicesToolViewModel : ObservableObject
         _deviceInventory.KnownDevices.CollectionChanged += OnDevicesChanged;
         _deviceInventory.SelectedDevices.CollectionChanged += OnSelectionChanged;
         _deviceAliases.Changed += OnAliasesChanged;
+        _netariumServerEndpoint.Changed += OnNetariumServerEndpointChanged;
 
         RefreshKnownDevices();
     }
@@ -48,6 +55,8 @@ public sealed class DevicesToolViewModel : ObservableObject
 
     public RelayCommand StopCommand { get; }
 
+    public RelayCommand ApplyServerCommand { get; }
+
     public RelayCommand<KnownDeviceRowViewModel> BeginEditAliasCommand { get; }
 
     public RelayCommand<KnownDeviceRowViewModel> SaveAliasCommand { get; }
@@ -58,6 +67,22 @@ public sealed class DevicesToolViewModel : ObservableObject
     {
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
+    }
+
+    public string ServerEndpoint
+    {
+        get => _serverEndpoint;
+        set
+        {
+            var normalizedValue = NetariumServerEndpointCatalog.NormalizeEndpoint(value) ?? string.Empty;
+            if (!SetProperty(ref _serverEndpoint, normalizedValue))
+            {
+                return;
+            }
+
+            ApplyServerCommand.NotifyCanExecuteChanged();
+            _ = PersistServerEndpointAsync(normalizedValue);
+        }
     }
 
     public string ConnectedSummary => $"Подключено: {_deviceInventory.KnownDevices.Count}";
@@ -99,6 +124,18 @@ public sealed class DevicesToolViewModel : ObservableObject
         StatusText = FormatResult("Стоп", result);
     }
 
+    private async Task ApplyServerAsync()
+    {
+        if (!CanApplyServer())
+        {
+            return;
+        }
+
+        StatusText = "Сервер...";
+        var result = await _deviceActionService.ConfigureNetariumServerAsync(_deviceInventory.SelectedDevices.ToArray(), ServerEndpoint);
+        StatusText = FormatResult("Сервер", result);
+    }
+
     private void OnDevicesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         RefreshKnownDevices();
@@ -113,6 +150,7 @@ public sealed class DevicesToolViewModel : ObservableObject
         PowerCommand.NotifyCanExecuteChanged();
         RebootCommand.NotifyCanExecuteChanged();
         StopCommand.NotifyCanExecuteChanged();
+        ApplyServerCommand.NotifyCanExecuteChanged();
     }
 
     private void OnSelectedRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -193,6 +231,19 @@ public sealed class DevicesToolViewModel : ObservableObject
         }
     }
 
+    private void OnNetariumServerEndpointChanged(object? sender, EventArgs e)
+    {
+        var endpoint = _netariumServerEndpoint.Endpoint;
+        if (string.Equals(ServerEndpoint, endpoint, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _serverEndpoint = endpoint;
+        OnPropertyChanged(nameof(ServerEndpoint));
+        ApplyServerCommand.NotifyCanExecuteChanged();
+    }
+
     private void BeginEditAlias(KnownDeviceRowViewModel? row)
     {
         if (row is null)
@@ -269,6 +320,24 @@ public sealed class DevicesToolViewModel : ObservableObject
         return string.IsNullOrWhiteSpace(device.NetworkEndpoint)
             ? device.Id
             : device.NetworkEndpoint;
+    }
+
+    private bool CanApplyServer()
+    {
+        return _deviceInventory.SelectedDevices.Count > 0 &&
+               !string.IsNullOrWhiteSpace(ServerEndpoint);
+    }
+
+    private async Task PersistServerEndpointAsync(string endpoint)
+    {
+        try
+        {
+            await _netariumServerEndpoint.SetEndpointAsync(endpoint);
+        }
+        catch
+        {
+            // Keep editing responsive even if settings persistence fails.
+        }
     }
 }
 

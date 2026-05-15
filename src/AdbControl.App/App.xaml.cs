@@ -40,6 +40,9 @@ public partial class App : System.Windows.Application
         var deviceAliasStore = new DeviceAliasFileStore(storage.Paths);
         var deviceAliases = new DeviceAliasCatalog(deviceAliasStore);
         await deviceAliases.InitializeAsync();
+        var netariumServerEndpointStore = new NetariumServerEndpointFileStore(storage.Paths);
+        var netariumServerEndpoint = new NetariumServerEndpointCatalog(netariumServerEndpointStore);
+        await netariumServerEndpoint.InitializeAsync();
         var autoConnectStore = new AutoConnectDeviceFileStore(storage.Paths);
         var autoConnectDevices = new AutoConnectDeviceCatalog(autoConnectStore);
         await autoConnectDevices.InitializeAsync();
@@ -75,6 +78,7 @@ public partial class App : System.Windows.Application
             toolCatalog,
             deviceInventory,
             deviceAliases,
+            netariumServerEndpoint,
             autoConnectDevices,
             apkLibrary,
             apkDeployment,

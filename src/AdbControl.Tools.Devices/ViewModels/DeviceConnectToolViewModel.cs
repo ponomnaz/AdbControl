@@ -59,6 +59,10 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             endpoint => _ = ToggleAutoConnectAsync(endpoint),
             endpoint => CanToggleAutoConnect(endpoint));
 
+        BeginEditAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(BeginEditAlias);
+        SaveAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(row => _ = SaveAliasAsync(row));
+        CancelAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(CancelAliasEdit);
+
         DiscoveredDevices.CollectionChanged += OnDiscoveredDevicesChanged;
         SelectedCandidates.CollectionChanged += OnSelectedCandidatesChanged;
         _deviceInventory.KnownDevices.CollectionChanged += OnKnownDevicesChanged;
@@ -82,6 +86,12 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public RelayCommand DisconnectSelectedCommand { get; }
 
     public RelayCommand<string> ToggleAutoConnectCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> BeginEditAliasCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> SaveAliasCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> CancelAliasCommand { get; }
 
     public string StatusText
     {
@@ -611,6 +621,52 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         RefreshAutoConnectFlags();
         NotifyCommandStateChanged();
     }
+
+    private void BeginEditAlias(DiscoveredDeviceItemViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        foreach (var item in DiscoveredDevices)
+        {
+            if (!ReferenceEquals(item, row) && item.IsEditingAlias)
+            {
+                item.CancelAliasEdit();
+            }
+        }
+
+        row.BeginAliasEdit();
+    }
+
+    private async Task SaveAliasAsync(DiscoveredDeviceItemViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var alias = string.IsNullOrWhiteSpace(row.AliasDraft)
+                ? null
+                : row.AliasDraft.Trim();
+
+            await _deviceAliases.SetAliasAsync(row.Endpoint, alias);
+            row.EndAliasEdit();
+        }
+        catch
+        {
+            row.CancelAliasEdit();
+            StatusText = "Не удалось сохранить имя";
+        }
+    }
+
+    private void CancelAliasEdit(DiscoveredDeviceItemViewModel? row)
+    {
+        row?.CancelAliasEdit();
+    }
 }
 
 public sealed record ConnectRequest(string Endpoint, Action<string> SetStatus);
@@ -622,6 +678,8 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     private string _secondaryText = string.Empty;
     private bool _hasSecondaryText;
     private bool _isAutoConnectEnabled;
+    private string _aliasDraft = string.Empty;
+    private bool _isEditingAlias;
 
     public DiscoveredDeviceItemViewModel(string endpoint, string status)
     {
@@ -664,6 +722,18 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
         set => SetProperty(ref _status, value);
     }
 
+    public string AliasDraft
+    {
+        get => _aliasDraft;
+        set => SetProperty(ref _aliasDraft, value);
+    }
+
+    public bool IsEditingAlias
+    {
+        get => _isEditingAlias;
+        private set => SetProperty(ref _isEditingAlias, value);
+    }
+
     public bool IsAutoConnectEnabled
     {
         get => _isAutoConnectEnabled;
@@ -690,5 +760,31 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
         SecondaryText = normalizedAlias is null
             ? string.Empty
             : Endpoint;
+
+        if (!IsEditingAlias)
+        {
+            AliasDraft = normalizedAlias ?? string.Empty;
+        }
+    }
+
+    public void BeginAliasEdit()
+    {
+        AliasDraft = string.Equals(Title, Endpoint, StringComparison.Ordinal)
+            ? string.Empty
+            : Title;
+        IsEditingAlias = true;
+    }
+
+    public void EndAliasEdit()
+    {
+        IsEditingAlias = false;
+    }
+
+    public void CancelAliasEdit()
+    {
+        AliasDraft = string.Equals(Title, Endpoint, StringComparison.Ordinal)
+            ? string.Empty
+            : Title;
+        IsEditingAlias = false;
     }
 }

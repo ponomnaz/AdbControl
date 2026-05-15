@@ -1,6 +1,10 @@
 using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Media3D;
 
 namespace AdbControl.Tools.Devices.Behaviors;
 
@@ -49,6 +53,8 @@ public static class ListBoxSelectionBehavior
 
         listBox.SelectionChanged -= OnListBoxSelectionChanged;
         listBox.SelectionChanged += OnListBoxSelectionChanged;
+        listBox.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
+        listBox.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
     }
 
     private static void OnListBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -77,5 +83,80 @@ public static class ListBoxSelectionBehavior
         {
             SetIsUpdating(listBox, false);
         }
+    }
+
+    private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListBox listBox ||
+            listBox.SelectionMode == SelectionMode.Single ||
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            return;
+        }
+
+        if (IsInteractiveElement(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        var listBoxItem = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (listBoxItem is null)
+        {
+            return;
+        }
+
+        var item = listBox.ItemContainerGenerator.ItemFromContainer(listBoxItem);
+        if (item == DependencyProperty.UnsetValue)
+        {
+            return;
+        }
+
+        if (listBoxItem.IsSelected)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.None)
+            {
+                listBox.SelectedItems.Remove(item);
+                listBox.Focus();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (Keyboard.Modifiers == ModifierKeys.None)
+        {
+            listBox.SelectedItems.Add(item);
+            listBox.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current)
+        where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = current switch
+            {
+                Visual or Visual3D => VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current),
+                FrameworkContentElement frameworkContentElement => frameworkContentElement.Parent ?? LogicalTreeHelper.GetParent(frameworkContentElement),
+                ContentElement contentElement => ContentOperations.GetParent(contentElement) ?? LogicalTreeHelper.GetParent(contentElement),
+                _ => LogicalTreeHelper.GetParent(current)
+            };
+        }
+
+        return null;
+    }
+
+    private static bool IsInteractiveElement(DependencyObject? current)
+    {
+        return FindAncestor<ButtonBase>(current) is not null ||
+               FindAncestor<TextBoxBase>(current) is not null ||
+               FindAncestor<ScrollBar>(current) is not null;
     }
 }

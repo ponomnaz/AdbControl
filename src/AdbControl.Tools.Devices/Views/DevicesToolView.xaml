@@ -19,6 +19,7 @@
         </Style>
 
         <Style x:Key="AliasEditorTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+            <Setter Property="ToolTip" Value="Имя телевизора" />
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
@@ -71,22 +72,47 @@
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1"
-                            Margin="16,0,0,0"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Bottom">
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding StopCommand}"
-                            Content="Стоп"
-                            Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding PowerCommand}"
-                            Content="Питание"
-                            Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Command="{Binding RebootCommand}"
-                            Content="Перезагрузка"
-                            Style="{DynamicResource PrimaryButtonStyle}" />
-                </StackPanel>
+                <Grid Grid.Column="1"
+                      Margin="16,0,0,0"
+                      VerticalAlignment="Bottom">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <TextBox Width="220"
+                                 Margin="0,0,8,0"
+                                 Style="{DynamicResource TextBoxInputStyle}"
+                                 Text="{Binding ServerEndpoint, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="IP:порт сервера" />
+                        <Button Width="88"
+                                Command="{Binding ApplyServerCommand}"
+                                Content="Сервер"
+                                Style="{DynamicResource SecondaryButtonStyle}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1"
+                                Margin="0,8,0,0"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Width="124"
+                                Margin="0,0,8,0"
+                                Command="{Binding StopCommand}"
+                                Content="Стоп Netarium"
+                                Style="{DynamicResource SecondaryButtonStyle}" />
+                        <Button Width="118"
+                                Margin="0,0,8,0"
+                                Command="{Binding RebootCommand}"
+                                Content="Перезагрузка"
+                                Style="{DynamicResource PrimaryButtonStyle}" />
+                        <Button Width="90"
+                                Command="{Binding PowerCommand}"
+                                Content="Питание"
+                                Style="{DynamicResource DangerButtonStyle}" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
@@ -118,16 +144,18 @@
                                     <ColumnDefinition Width="120" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Background="Transparent">
-                                    <StackPanel.InputBindings>
-                                        <MouseBinding MouseAction="LeftDoubleClick"
-                                                      Command="{Binding DataContext.BeginEditAliasCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                      CommandParameter="{Binding}" />
-                                    </StackPanel.InputBindings>
+                                    <StackPanel.ContextMenu>
+                                        <ContextMenu DataContext="{Binding}">
+                                            <MenuItem Header="Переименовать"
+                                                      Click="OnRenameMenuItemClick" />
+                                        </ContextMenu>
+                                    </StackPanel.ContextMenu>
                                     <TextBlock Style="{StaticResource AliasDisplayTextStyle}"
                                                FontWeight="SemiBold"
                                                Text="{Binding Title}" />
                                     <TextBox Style="{StaticResource AliasEditorTextBoxStyle}"
                                              Loaded="OnAliasEditorLoaded"
+                                             IsVisibleChanged="OnAliasEditorIsVisibleChanged"
                                              LostFocus="OnAliasEditorLostFocus"
                                              KeyDown="OnAliasEditorKeyDown"
                                              Text="{Binding AliasDraft, UpdateSourceTrigger=PropertyChanged}" />

@@ -8,6 +8,26 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
+        <Style x:Key="DiscoveredDevicePrimaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DiscoveredAliasEditorTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="ToolTip" Value="Имя телевизора" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="DiscoveredDeviceSecondaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
             <Setter Property="Visibility" Value="Collapsed" />
             <Setter Property="TextWrapping" Value="NoWrap" />
@@ -15,6 +35,9 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding HasSecondaryText}" Value="True">
                     <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEditingAlias}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -65,8 +88,7 @@
 
     </UserControl.Resources>
 
-    <Grid Margin="6"
-          PreviewMouseDown="OnRootPreviewMouseDown">
+    <Grid Margin="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -121,7 +143,8 @@
                              MinWidth="260"
                              Margin="8,0,8,0"
                              Style="{DynamicResource TextBoxInputStyle}"
-                             Text="{Binding EndpointInput, UpdateSourceTrigger=PropertyChanged}">
+                             Text="{Binding EndpointInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="IP:порт телевизора">
                         <TextBox.InputBindings>
                             <KeyBinding Key="Enter"
                                         Command="{Binding ConnectManualCommand}" />
@@ -134,13 +157,13 @@
                             Style="{DynamicResource SecondaryButtonStyle}" />
                     <Button Grid.Column="3"
                             Margin="0,0,8,0"
-                            Command="{Binding DisconnectSelectedCommand}"
-                            Content="Отключить"
-                            Style="{DynamicResource DangerButtonStyle}" />
-                    <Button Grid.Column="4"
                             Command="{Binding ConnectSelectedCommand}"
                             Content="Подключить выбранные"
                             Style="{DynamicResource PrimaryButtonStyle}" />
+                    <Button Grid.Column="4"
+                            Command="{Binding DisconnectSelectedCommand}"
+                            Content="Отключить"
+                            Style="{DynamicResource DangerButtonStyle}" />
                 </Grid>
             </Grid>
         </Border>
@@ -168,11 +191,22 @@
                                     <ColumnDefinition Width="140" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
+                                    <StackPanel.ContextMenu>
+                                        <ContextMenu DataContext="{Binding}">
+                                            <MenuItem Header="Переименовать"
+                                                      Click="OnRenameMenuItemClick" />
+                                        </ContextMenu>
+                                    </StackPanel.ContextMenu>
                                     <TextBlock VerticalAlignment="Center"
+                                               Style="{StaticResource DiscoveredDevicePrimaryTextStyle}"
                                                FontWeight="SemiBold"
-                                               TextWrapping="NoWrap"
-                                               TextTrimming="CharacterEllipsis"
                                                Text="{Binding Title}" />
+                                    <TextBox Style="{StaticResource DiscoveredAliasEditorTextBoxStyle}"
+                                             Loaded="OnAliasEditorLoaded"
+                                             IsVisibleChanged="OnAliasEditorIsVisibleChanged"
+                                             LostFocus="OnAliasEditorLostFocus"
+                                             KeyDown="OnAliasEditorKeyDown"
+                                             Text="{Binding AliasDraft, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Margin="0,4,0,0"
                                                Style="{StaticResource DiscoveredDeviceSecondaryTextStyle}"
                                                Text="{Binding SecondaryText}" />
