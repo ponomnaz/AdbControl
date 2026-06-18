@@ -52,7 +52,7 @@
                             <DataTemplate>
                                 <Button Margin="0,0,0,8"
                                         Command="{Binding OpenCommand}"
-                                        MouseDoubleClick="OnNavigationItemMouseDoubleClick"
+                                        PreviewMouseLeftButtonDown="OnNavigationItemPreviewMouseLeftButtonDown"
                                         Style="{DynamicResource ToolNavigationButtonStyle}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>

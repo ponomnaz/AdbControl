@@ -2,6 +2,7 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
@@ -23,5 +24,6 @@ public sealed record ToolActivationContext(
     IDeviceLogcatService DeviceLogcat,
     IAdbConsoleService AdbConsole,
     IDeviceTopService DeviceTop,
+    IRemoteControlService RemoteControl,
     CommandTraceJournal CommandTraceJournal,
     Action<string> OpenTool);

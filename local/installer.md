@@ -8,40 +8,33 @@
 
 ## Что сейчас принято в проекте
 
-В репозитории выбран `WiX Toolset` и `MSI`.
+В репозитории выбран `Inno Setup`.
 
 Почему:
 
-- нормальная установка в `Program Files`
-- штатный uninstall
-- предсказуемые major upgrade
-- не нужно собирать самодельный setup
+- один скрипт `.iss` → один `setup.exe`
+- встроенный мастер: выбор папки, чекбокс "ярлык на рабочем столе"
+- штатная регистрация в "Программы и компоненты" и штатный uninstall
+- не нужно собирать самодельный setup/uninstall host
 
 ## Что уже делает текущий installer
 
 - ставит приложение в `Program Files`
 - регистрирует uninstall
 - не пишет runtime-данные рядом с exe
-- создаёт ярлык на рабочем столе
+- создаёт ярлык на рабочем столе (по чекбоксу при установке)
 - создаёт ярлык в меню Пуск
-- собирает отдельный `setup.exe` поверх MSI
 
 ## Что должен делать uninstall
 
-Минимум:
-
-- удалить установленные бинарники
+- удалить установленные бинарники и папку установки
 - убрать shortcuts
 - убрать installer registration
+- удалить `%LOCALAPPDATA%\AdbControl` (логи, кэш, алиасы устройств, пресеты) — полная очистка
 
-По умолчанию не нужно автоматически удалять:
+Это настроено через `[UninstallDelete]` в `build/installer/inno/AdbControl.iss`.
 
-- логи
-- пресеты
-- layout
-- экспортированные файлы
-
-Для этого уже добавлен отдельный cleanup script:
+Отдельный ручной cleanup script (на случай, если нужно сбросить данные приложения без удаления самого приложения):
 
 - [build/installer/scripts/Clean-LocalAppData.ps1](../build/installer/scripts/Clean-LocalAppData.ps1)
 
@@ -55,50 +48,28 @@ powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Install
 
 Скрипт по умолчанию:
 
-1. делает `dotnet publish` приложения
-2. собирает `MSI` через `WiX`
-3. кладёт результат в `artifacts\installer\win-x64`
+1. делает `dotnet publish` приложения (self-contained, win-x64)
+2. собирает установщик через Inno Setup (`ISCC.exe`)
+3. кладёт результат в `artifacts\installer\win-x64\AdbControl-Setup.exe`
+
+Требуется установленный [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ## Какой файл запускать
 
-Если нужен нормальный мастер установки, где есть:
-
-- выбор папки установки
-- выбор создания ярлыка на рабочем столе
-
-открывай именно:
-
 ```text
-artifacts\installer\win-x64\AdbControl.Setup.msi
+artifacts\installer\win-x64\AdbControl-Setup.exe
 ```
 
-Это и есть основной установщик. Дополнительный `setup.exe` больше не нужен для обычной установки.
+Это единственный файл, который нужно отдавать пользователю. Мастер сам спросит папку установки и предложит чекбокс "Создать ярлык на рабочем столе".
 
 ## Открыть мастер сразу после сборки
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -OpenMsi
-```
-
-## Если всё же нужен bootstrapper exe
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -IncludeBootstrapper
-```
-
-## Параметры сборки
-
-Можно переопределить версию и runtime:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 `
-  -Version 0.1.0 `
-  -Runtime win-x64 `
-  -Configuration Release
+powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -Run
 ```
 
 ## Что важно помнить
 
-- для первой сборки нужен доступ к `NuGet`, потому что `WixToolset.Sdk` подтянется как пакет
-- runtime-данные приложения по-прежнему идут в `%LOCALAPPDATA%\AdbControl`
-- uninstall не удаляет локальные данные автоматически
+- для сборки нужен установленный Inno Setup (ISCC.exe), NuGet не требуется
+- runtime-данные приложения идут в `%LOCALAPPDATA%\AdbControl`
+- uninstall удаляет локальные данные автоматически

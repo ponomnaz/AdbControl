@@ -4,6 +4,7 @@ using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
 using AdbControl.Application.Top;
 using AdbControl.Application.Tools;
@@ -26,6 +27,7 @@ public sealed class WorkspaceService : ObservableObject
     private readonly IDeviceLogcatService _deviceLogcat;
     private readonly IAdbConsoleService _adbConsole;
     private readonly IDeviceTopService _deviceTop;
+    private readonly IRemoteControlService _remoteControl;
     private readonly CommandTraceJournal _commandTraceJournal;
     private WorkspaceTab? _activeTab;
 
@@ -44,6 +46,7 @@ public sealed class WorkspaceService : ObservableObject
         IDeviceLogcatService deviceLogcat,
         IAdbConsoleService adbConsole,
         IDeviceTopService deviceTop,
+        IRemoteControlService remoteControl,
         CommandTraceJournal commandTraceJournal)
     {
         _toolCatalog = toolCatalog;
@@ -60,6 +63,7 @@ public sealed class WorkspaceService : ObservableObject
         _deviceLogcat = deviceLogcat;
         _adbConsole = adbConsole;
         _deviceTop = deviceTop;
+        _remoteControl = remoteControl;
         _commandTraceJournal = commandTraceJournal;
     }
 
@@ -172,6 +176,7 @@ public sealed class WorkspaceService : ObservableObject
             _deviceLogcat,
             _adbConsole,
             _deviceTop,
+            _remoteControl,
             _commandTraceJournal,
             OpenTool);
 

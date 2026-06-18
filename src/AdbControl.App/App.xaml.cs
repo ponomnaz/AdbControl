@@ -2,6 +2,7 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Logcat;
+using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
 using AdbControl.Application.Tools;
 using AdbControl.Application.Workspace;
@@ -16,6 +17,7 @@ using AdbControl.Tools.Devices;
 using AdbControl.Tools.Home;
 using AdbControl.Tools.Library;
 using AdbControl.Tools.Logcat;
+using AdbControl.Tools.Remote;
 using AdbControl.Tools.Top;
 using AdbControl.Tools.Apk;
 using System.IO;
@@ -58,6 +60,7 @@ public partial class App : System.Windows.Application
         IDeviceLogcatService deviceLogcat = new AdbLogcatService(adbProcessRunner, commandTraceJournal);
         IAdbConsoleService adbConsole = new AdbConsoleService(adbProcessRunner);
         var deviceTop = new AdbTopService(adbProcessRunner);
+        IRemoteControlService remoteControl = new AdbRemoteControlService(adbProcessRunner, commandTraceJournal);
 
         IToolModule[] modules =
         [
@@ -67,6 +70,7 @@ public partial class App : System.Windows.Application
             new ConsoleToolModule(),
             new LogcatToolModule(),
             new TopToolModule(),
+            new RemoteToolModule(),
             new CommandLogToolModule(),
             new ToolLibraryModule()
         ];
@@ -89,6 +93,7 @@ public partial class App : System.Windows.Application
             deviceLogcat,
             adbConsole,
             deviceTop,
+            remoteControl,
             commandTraceJournal);
         workspace.EnsureStartupTabs();
 

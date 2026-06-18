@@ -18,6 +18,7 @@
     <ProjectReference Include="..\AdbControl.Tools.Home\AdbControl.Tools.Home.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Library\AdbControl.Tools.Library.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Logcat\AdbControl.Tools.Logcat.csproj" />
+    <ProjectReference Include="..\AdbControl.Tools.Remote\AdbControl.Tools.Remote.csproj" />
     <ProjectReference Include="..\AdbControl.Tools.Top\AdbControl.Tools.Top.csproj" />
   </ItemGroup>
 

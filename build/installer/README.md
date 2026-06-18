@@ -1,30 +1,30 @@
 # Installer Layer
 
-В этой зоне лежит foundation для Windows-инсталлятора на `WiX Toolset`.
+В этой зоне лежит инсталлятор на `Inno Setup`.
 
 ## Что здесь есть
 
-- `wix/AdbControl.Installer.wixproj` — WiX SDK-проект
-- `wix/AdbControl.Bundle.wixproj` — bundle-проект для `setup.exe` (опционально)
-- `wix/Package.wxs` — авторинг MSI
-- `wix/Bundle.wxs` — авторинг bootstrapper exe
-- `scripts/Build-Installer.ps1` — publish приложения + build MSI
-- `scripts/Clean-LocalAppData.ps1` — явная очистка `%LOCALAPPDATA%\AdbControl`
+- `inno/AdbControl.iss` — скрипт Inno Setup
+- `scripts/Build-Installer.ps1` — publish приложения + сборка инсталлятора
+- `scripts/Clean-LocalAppData.ps1` — ручная очистка `%LOCALAPPDATA%\AdbControl` (не часть установки/удаления)
 
 ## Что делает installer
 
-- ставит приложение в `Program Files`
-- создаёт запись для uninstall
-- не пишет runtime-данные в install directory
-- не удаляет пользовательские данные молча
+- ставит приложение в `Program Files\AdbControl`
+- создаёт ярлык в меню "Пуск"
+- по желанию пользователя (чекбокс) создаёт ярлык на рабочем столе
+- регистрирует запись в "Программы и компоненты" со штатным uninstall
 
-## Что не делает uninstall по умолчанию
+## Что делает uninstall
 
-- не удаляет логи
-- не удаляет локальные настройки
-- не удаляет пресеты и экспортированные файлы
+- удаляет установленные файлы и папку установки
+- удаляет ярлыки
+- удаляет рабочие данные приложения `%LOCALAPPDATA%\AdbControl` (логи, кэш, алиасы устройств и т.п.)
 
-Для этого есть отдельный cleanup script.
+## Требования для сборки
+
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) — должен быть установлен (предоставляет `ISCC.exe`)
+- .NET SDK (для `dotnet publish`)
 
 ## Сборка
 
@@ -34,36 +34,25 @@
 powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1
 ```
 
-Обычный сценарий:
-
-- запускаешь одну команду сборки
-- получаешь один понятный мастер установки
-
-Если нужен мастер установки с:
-
-- выбором директории
-- выбором ярлыка на рабочем столе
-
-открывай именно этот файл:
+Результат:
 
 ```text
-artifacts\installer\win-x64\AdbControl.Setup.msi
+artifacts\installer\win-x64\AdbControl-Setup.exe
 ```
 
-`setup.exe` не нужен для обычной установки. Он собирается только если явно попросить:
+Это единственный файл, который нужно отдавать пользователю.
 
-```text
-artifacts\installer\win-x64\AdbControl.Setup.exe
-```
-
-## Открыть мастер сразу после сборки
+## Параметры сборки
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -OpenMsi
+powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 `
+  -Version 0.1.0 `
+  -Runtime win-x64 `
+  -Configuration Release
 ```
 
-## Опциональный bootstrapper
+## Сразу запустить установщик после сборки
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -IncludeBootstrapper
+powershell -ExecutionPolicy Bypass -File .\build\installer\scripts\Build-Installer.ps1 -Run
 ```
