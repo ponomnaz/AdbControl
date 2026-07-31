@@ -103,6 +103,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -121,14 +123,80 @@
                             Margin="16,0,0,0"
                             Orientation="Horizontal"
                             VerticalAlignment="Top">
-                    <Button Command="{Binding RefreshCommand}"
+                    <Button Margin="0,0,8,0"
+                            Command="{Binding RefreshCommand}"
                             Content="Сканировать"
+                            Style="{DynamicResource SecondaryButtonStyle}" />
+                    <Button Command="{Binding StopScanCommand}"
+                            Content="Стоп"
                             Style="{DynamicResource SecondaryButtonStyle}" />
                 </StackPanel>
 
-                <Grid Grid.Row="1"
+                <ProgressBar Grid.Row="1"
+                             Grid.ColumnSpan="2"
+                             Height="3"
+                             Margin="0,10,0,0"
+                             BorderThickness="0"
+                             Minimum="0"
+                             Maximum="1"
+                             Background="{DynamicResource Brush.SurfaceAlt}"
+                             Foreground="{DynamicResource Brush.AccentPrimary}"
+                             Value="{Binding ScanProgressFraction, Mode=OneWay}">
+                    <ProgressBar.Style>
+                        <Style TargetType="ProgressBar">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsScanning}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
+
+                <Grid Grid.Row="2"
                       Grid.ColumnSpan="2"
                       Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="Сеть" />
+                    <TextBox Grid.Column="1"
+                             MinWidth="260"
+                             Margin="8,0,8,0"
+                             Style="{DynamicResource TextBoxInputStyle}"
+                             Text="{Binding ScanTargetInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Пусто — локальные подсети. Иначе: 212.59.101.0/24, 212.59.101.1-254, 212.59.101.75, tv.local:5555. Через запятую можно несколько.">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter"
+                                        Command="{Binding RefreshCommand}" />
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <TextBlock Grid.Column="2"
+                               VerticalAlignment="Center"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="Порты" />
+                    <TextBox Grid.Column="3"
+                             MinWidth="120"
+                             Margin="8,0,0,0"
+                             Style="{DynamicResource TextBoxInputStyle}"
+                             Text="{Binding PortsInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Пусто — 5555. Иначе: 5555-5585 или 5555,5560-5570.">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter"
+                                        Command="{Binding RefreshCommand}" />
+                        </TextBox.InputBindings>
+                    </TextBox>
+                </Grid>
+
+                <Grid Grid.Row="3"
+                      Grid.ColumnSpan="2"
+                      Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />

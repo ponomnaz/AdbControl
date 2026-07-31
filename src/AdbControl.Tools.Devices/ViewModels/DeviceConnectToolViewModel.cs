@@ -16,12 +16,17 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private readonly IAdbConnectionService _adbConnectionService;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
+    private CancellationTokenSource? _scanCancellation;
+    private ScanProgress? _scanProgress;
     private bool _isScanning;
     private bool _isConnecting;
     private bool _isDisconnecting;
     private bool _isTogglingAutoConnect;
     private string _statusText = string.Empty;
     private string _endpointInput = string.Empty;
+    private string _scanTargetInput = string.Empty;
+    private string _portsInput = string.Empty;
+    private double _scanProgressFraction;
 
     public DeviceConnectToolViewModel(
         DeviceInventoryState deviceInventory,
@@ -42,6 +47,10 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         RefreshCommand = new RelayCommand(
             () => _ = RefreshAsync(),
             () => !_isScanning && !_isConnecting && !_isDisconnecting && !_isTogglingAutoConnect);
+
+        StopScanCommand = new RelayCommand(
+            () => _scanCancellation?.Cancel(),
+            () => _isScanning);
 
         ConnectSelectedCommand = new RelayCommand(
             () => _ = ConnectSelectedAsync(),
@@ -78,6 +87,8 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public ICollectionView DiscoveredDevicesView { get; }
 
     public RelayCommand RefreshCommand { get; }
+
+    public RelayCommand StopScanCommand { get; }
 
     public RelayCommand ConnectSelectedCommand { get; }
 
@@ -116,13 +127,49 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Цель сканирования: пусто — локальные подсети, иначе CIDR / диапазон / хост / хост:порт.
+    /// </summary>
+    public string ScanTargetInput
+    {
+        get => _scanTargetInput;
+        set => SetProperty(ref _scanTargetInput, value);
+    }
+
+    /// <summary>Порты для проверки; пусто — 5555.</summary>
+    public string PortsInput
+    {
+        get => _portsInput;
+        set => SetProperty(ref _portsInput, value);
+    }
+
+    public bool IsScanning
+    {
+        get => _isScanning;
+        private set
+        {
+            if (SetProperty(ref _isScanning, value))
+            {
+                OnPropertyChanged(nameof(DiscoverySummary));
+            }
+        }
+    }
+
+    public double ScanProgressFraction
+    {
+        get => _scanProgressFraction;
+        private set => SetProperty(ref _scanProgressFraction, value);
+    }
+
     public string DiscoverySummary
     {
         get
         {
             if (_isScanning)
             {
-                return "Поиск...";
+                return _scanProgress is { TotalProbes: > 0 } progress
+                    ? $"Поиск... {progress.CompletedProbes}/{progress.TotalProbes}"
+                    : "Поиск...";
             }
 
             var visibleCount = DiscoveredDevicesView.Cast<object>().Count();
@@ -136,26 +183,64 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
 
     private async Task RefreshAsync()
     {
+        if (!TryBuildScanProfile(out var profile, out var profileError))
+        {
+            StatusText = profileError ?? "Неверная цель сканирования";
+            return;
+        }
+
+        using var scanCancellation = new CancellationTokenSource();
+        _scanCancellation = scanCancellation;
+
         try
         {
-            _isScanning = true;
+            IsScanning = true;
+            _scanProgress = null;
+            ScanProgressFraction = 0d;
             NotifyCommandStateChanged();
 
             SelectedCandidates.Clear();
             DiscoveredDevices.Clear();
             StatusText = "Поиск...";
 
-            await PruneDisconnectedDevicesAsync();
-            var discoveredEndpoints = await _deviceDiscoveryService.DiscoverAsync();
-            foreach (var endpoint in discoveredEndpoints.Select(x => x.Endpoint))
+            var seenEndpoints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Уже подключённые устройства показываем независимо от того, попадают ли
+            // они в зону сканирования: проброшенный endpoint иначе остаётся невидимым.
+            foreach (var endpoint in await SyncConnectedDevicesAsync())
             {
-                DiscoveredDevices.Add(CreateDiscoveredItem(
-                    endpoint,
-                    IsConnected(endpoint) ? "Уже подключено" : "Готово"));
+                if (seenEndpoints.Add(endpoint))
+                {
+                    DiscoveredDevices.Add(CreateDiscoveredItem(endpoint, "Уже подключено"));
+                }
+            }
+
+            var scanProgress = new Progress<ScanProgress>(OnScanProgress);
+
+            await foreach (var discovered in _deviceDiscoveryService.DiscoverAsync(
+                               profile,
+                               scanProgress,
+                               scanCancellation.Token))
+            {
+                if (seenEndpoints.Add(discovered.Endpoint))
+                {
+                    DiscoveredDevices.Add(CreateDiscoveredItem(
+                        discovered.Endpoint,
+                        IsConnected(discovered.Endpoint) ? "Уже подключено" : "Готово"));
+                }
             }
 
             RefreshAutoConnectFlags();
             StatusText = string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            RefreshAutoConnectFlags();
+            StatusText = "Сканирование остановлено";
+        }
+        catch (ScanBudgetExceededException ex)
+        {
+            StatusText = ex.Message;
         }
         catch (Exception ex)
         {
@@ -163,9 +248,40 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         }
         finally
         {
-            _isScanning = false;
+            _scanCancellation = null;
+            _scanProgress = null;
+            ScanProgressFraction = 0d;
+            IsScanning = false;
             NotifyCommandStateChanged();
         }
+    }
+
+    private bool TryBuildScanProfile(out ScanProfile profile, out string? error)
+    {
+        profile = ScanProfile.LocalNetwork;
+
+        if (!ScanTargetParser.TryParse(ScanTargetInput, out var targets, out error))
+        {
+            return false;
+        }
+
+        if (!PortSpec.TryParse(PortsInput, out var ports, out error))
+        {
+            return false;
+        }
+
+        profile = targets.Count == 0
+            ? ScanProfile.LocalNetwork with { Ports = ports }
+            : ScanProfile.ForTargets(targets, ports);
+
+        return true;
+    }
+
+    private void OnScanProgress(ScanProgress progress)
+    {
+        _scanProgress = progress;
+        ScanProgressFraction = progress.Fraction;
+        OnPropertyChanged(nameof(DiscoverySummary));
     }
 
     private async Task ConnectSelectedAsync()
@@ -191,7 +307,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
                 .Select(x => new ConnectRequest(x.Endpoint, status => x.Status = status))
                 .ToArray());
 
-            await PruneDisconnectedDevicesAsync();
+            await SyncConnectedDevicesAsync();
 
             var failedCount = selectedItems.Length - connectedDevices.Count;
             StatusText = failedCount == 0
@@ -253,7 +369,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
                 _deviceInventory.RemoveKnownDevicesByEndpoint(disconnectedEndpoints);
             }
 
-            await PruneDisconnectedDevicesAsync();
+            await SyncConnectedDevicesAsync();
 
             StatusText = failedCount == 0
                 ? $"Отключено: {disconnectedEndpoints.Count}"
@@ -297,7 +413,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             var connectedDevices = await ConnectEndpointsAsync(
                 [new ConnectRequest(endpoint, status => MarkEndpointStatus(endpoint, status))]);
 
-            await PruneDisconnectedDevicesAsync();
+            await SyncConnectedDevicesAsync();
 
             StatusText = connectedDevices.Count == 1
                 ? "Подключено: 1"
@@ -481,6 +597,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private void NotifyCommandStateChanged()
     {
         RefreshCommand.NotifyCanExecuteChanged();
+        StopScanCommand.NotifyCanExecuteChanged();
         ConnectSelectedCommand.NotifyCanExecuteChanged();
         ConnectManualCommand.NotifyCanExecuteChanged();
         DisconnectSelectedCommand.NotifyCanExecuteChanged();
@@ -565,10 +682,22 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         _deviceInventory.ReplaceSelection([device]);
     }
 
-    private async Task PruneDisconnectedDevicesAsync()
+    private async Task<IReadOnlyList<string>> SyncConnectedDevicesAsync()
     {
         var connectedEndpoints = await _adbConnectionService.GetConnectedEndpointsAsync();
         _deviceInventory.RemoveDisconnectedNetworkDevices(connectedEndpoints);
+
+        var adoptedDevices = connectedEndpoints
+            .Where(endpoint => !IsConnected(endpoint))
+            .Select(CreateConnectedDevice)
+            .ToArray();
+
+        if (adoptedDevices.Length > 0)
+        {
+            _deviceInventory.UpsertKnownDevices(adoptedDevices);
+        }
+
+        return connectedEndpoints;
     }
 
     private bool FilterDiscoveredDevice(object candidate)

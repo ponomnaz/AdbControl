@@ -16,24 +16,30 @@ function Remove-PathIfExists {
 }
 
 function Find-Iscc {
-    $candidate = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
-    if ($candidate) {
-        return $candidate.Source
-    }
-
-    $defaultPaths = @(
-        "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    $paths = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
     )
 
-    foreach ($path in $defaultPaths) {
-        if (Test-Path -LiteralPath $path) {
-            return $path
+    foreach ($p in $paths) {
+        if (Test-Path -LiteralPath $p) {
+            return $p
         }
     }
 
-    throw "ISCC.exe (Inno Setup compiler) не найден. Установи Inno Setup: https://jrsoftware.org/isdl.php"
+    # fallback — через registry (самый надёжный способ)
+    $reg = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" `
+        -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like "*Inno Setup*" } |
+        Select-Object -First 1
+
+    if ($reg.InstallLocation) {
+        $exe = Join-Path $reg.InstallLocation "ISCC.exe"
+        if (Test-Path $exe) { return $exe }
+    }
+
+    throw "ISCC.exe not found"
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\..")

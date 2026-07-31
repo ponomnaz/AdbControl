@@ -52,7 +52,7 @@ public partial class App : System.Windows.Application
         var commandTraceJournal = new CommandTraceJournal(commandTraceStore);
         await commandTraceJournal.InitializeAsync();
         var adbProcessRunner = new AdbProcessRunner(commandTraceJournal);
-        var deviceDiscovery = new LocalNetworkAdbDiscoveryService();
+        var deviceDiscovery = new NetworkAdbDiscoveryService();
         var adbConnection = new AdbConnectionService(adbProcessRunner);
         IApkDeploymentService apkDeployment = new AdbApkDeploymentService(adbProcessRunner);
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
