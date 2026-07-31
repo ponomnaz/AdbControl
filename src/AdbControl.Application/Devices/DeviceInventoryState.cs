@@ -38,22 +38,27 @@ public sealed class DeviceInventoryState : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Добавляет или обновляет устройства. Запись с теми же значениями не переприсваивается:
+    /// фоновая синхронизация идёт каждые несколько секунд, а каждое присваивание — это
+    /// событие Replace, из-за которого списки в UI пересобираются и теряют выделение.
+    /// </summary>
     public void UpsertKnownDevices(IEnumerable<TvDeviceProfile> devices)
     {
         foreach (var device in devices)
         {
             var knownIndex = FindDeviceIndex(KnownDevices, device);
-            if (knownIndex >= 0)
-            {
-                KnownDevices[knownIndex] = device;
-            }
-            else
+            if (knownIndex < 0)
             {
                 KnownDevices.Add(device);
             }
+            else if (KnownDevices[knownIndex] != device)
+            {
+                KnownDevices[knownIndex] = device;
+            }
 
             var selectedIndex = FindDeviceIndex(SelectedDevices, device);
-            if (selectedIndex >= 0)
+            if (selectedIndex >= 0 && SelectedDevices[selectedIndex] != device)
             {
                 SelectedDevices[selectedIndex] = device;
             }
@@ -90,38 +95,37 @@ public sealed class DeviceInventoryState : ObservableObject
         RemoveMatchingDevices(SelectedDevices, endpointSet);
     }
 
-    public void RemoveDisconnectedNetworkDevices(IEnumerable<string> endpoints)
+    /// <summary>
+    /// Убирает устройства, которых больше нет в <c>adb devices</c>. Сверка идёт по
+    /// <see cref="TvDeviceProfile.Id"/>, поэтому одинаково работает и для сетевых
+    /// адресов, и для USB-серийников.
+    /// </summary>
+    public void RemoveDevicesMissingFrom(IEnumerable<string> deviceIds)
     {
-        var endpointSet = endpoints
+        var idSet = deviceIds
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        for (var index = KnownDevices.Count - 1; index >= 0; index--)
+        RemoveAdbDevicesMissing(KnownDevices, idSet);
+        RemoveAdbDevicesMissing(SelectedDevices, idSet);
+    }
+
+    private static void RemoveAdbDevicesMissing(IList<TvDeviceProfile> devices, HashSet<string> idSet)
+    {
+        for (var index = devices.Count - 1; index >= 0; index--)
         {
-            var device = KnownDevices[index];
-            if (device.PreferredConnection != DeviceConnectionKind.Network || string.IsNullOrWhiteSpace(device.NetworkEndpoint))
+            var device = devices[index];
+
+            // Устройства неизвестного происхождения не трогаем: их не adb добавлял.
+            if (device.PreferredConnection is not (DeviceConnectionKind.Network or DeviceConnectionKind.Usb))
             {
                 continue;
             }
 
-            if (!endpointSet.Contains(device.NetworkEndpoint))
+            if (!idSet.Contains(device.Id))
             {
-                KnownDevices.RemoveAt(index);
-            }
-        }
-
-        for (var index = SelectedDevices.Count - 1; index >= 0; index--)
-        {
-            var device = SelectedDevices[index];
-            if (device.PreferredConnection != DeviceConnectionKind.Network || string.IsNullOrWhiteSpace(device.NetworkEndpoint))
-            {
-                continue;
-            }
-
-            if (!endpointSet.Contains(device.NetworkEndpoint))
-            {
-                SelectedDevices.RemoveAt(index);
+                devices.RemoveAt(index);
             }
         }
     }

@@ -24,11 +24,17 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace AdbControl.App;
 
 public partial class App : System.Windows.Application
 {
+    private static readonly TimeSpan DeviceInventoryPollInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AutoConnectRetryDelay = TimeSpan.FromSeconds(3);
+
+    private DispatcherTimer? _deviceInventoryTimer;
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -58,6 +64,7 @@ public partial class App : System.Windows.Application
         var deviceDiscovery = new NetworkAdbDiscoveryService();
         IMdnsDiscoveryService mdnsDiscovery = new AdbMdnsDiscoveryService(adbProcessRunner);
         var adbConnection = new AdbConnectionService(adbProcessRunner);
+        var deviceInventorySync = new DeviceInventorySyncService(deviceInventory, adbConnection, deviceAliases);
         IApkDeploymentService apkDeployment = new AdbApkDeploymentService(adbProcessRunner);
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
         var deviceActions = new AdbDeviceActionService(adbProcessRunner);
@@ -94,6 +101,7 @@ public partial class App : System.Windows.Application
             apkDevicePackages,
             deviceDiscovery,
             mdnsDiscovery,
+            deviceInventorySync,
             adbConnection,
             deviceActions,
             deviceLogcat,
@@ -111,7 +119,38 @@ public partial class App : System.Windows.Application
 
         MainWindow = shellWindow;
         shellWindow.Show();
-        _ = TryAutoConnectOnStartupAsync(autoConnectDevices, adbConnection, deviceInventory, deviceAliases);
+
+        StartDeviceInventoryMonitor(deviceInventorySync);
+        _ = TryAutoConnectOnStartupAsync(autoConnectDevices, adbConnection, deviceInventorySync);
+    }
+
+    /// <summary>
+    /// Фоновое слежение за составом устройств. Таймер диспетчера, а не пула потоков:
+    /// синхронизация меняет наблюдаемые коллекции, а они привязаны к потоку UI.
+    /// </summary>
+    private void StartDeviceInventoryMonitor(DeviceInventorySyncService deviceInventorySync)
+    {
+        _deviceInventoryTimer = new DispatcherTimer
+        {
+            Interval = DeviceInventoryPollInterval
+        };
+
+        _deviceInventoryTimer.Tick += (_, _) => _ = SafeSyncAsync(deviceInventorySync);
+        _deviceInventoryTimer.Start();
+
+        _ = SafeSyncAsync(deviceInventorySync);
+    }
+
+    private static async Task SafeSyncAsync(DeviceInventorySyncService deviceInventorySync)
+    {
+        try
+        {
+            await deviceInventorySync.SyncOnceAsync();
+        }
+        catch
+        {
+            // Опрос устройств не должен ронять приложение: следующий тик попробует снова.
+        }
     }
 
     private static void RegisterCrashLogging(AppDataPaths paths)
@@ -164,8 +203,7 @@ public partial class App : System.Windows.Application
     private static async Task TryAutoConnectOnStartupAsync(
         AutoConnectDeviceCatalog autoConnectDevices,
         IAdbConnectionService adbConnection,
-        DeviceInventoryState deviceInventory,
-        DeviceAliasCatalog deviceAliases)
+        DeviceInventorySyncService deviceInventorySync)
     {
         try
         {
@@ -175,29 +213,37 @@ public partial class App : System.Windows.Application
                 return;
             }
 
-            foreach (var endpoint in endpoints)
-            {
-                var result = await adbConnection.ConnectAsync(endpoint);
-                if (!result.IsSuccess)
-                {
-                    continue;
-                }
+            // Параллельно и с одним повтором: последовательный обход упирался в таймаут
+            // каждого недоступного адреса, а первая попытка часто приходится на момент,
+            // когда сеть после запуска системы ещё не поднялась.
+            await Task.WhenAll(endpoints.Select(endpoint =>
+                ConnectWithRetryAsync(adbConnection, endpoint)));
 
-                var alias = deviceAliases.GetAlias(endpoint);
-                deviceInventory.UpsertKnownDevices(
-                [
-                    new TvDeviceProfile(
-                        endpoint,
-                        string.IsNullOrWhiteSpace(alias) ? endpoint : alias,
-                        endpoint,
-                        DeviceConnectionKind.Network,
-                        DeviceReachability.Connected)
-                ]);
-            }
+            // Инвентарь наполняет синхронизация — здесь достаточно её подтолкнуть.
+            await deviceInventorySync.SyncOnceAsync();
         }
         catch
         {
             // Startup auto-connect should never break shell launch.
+        }
+    }
+
+    private static async Task ConnectWithRetryAsync(IAdbConnectionService adbConnection, string endpoint)
+    {
+        try
+        {
+            var result = await adbConnection.ConnectAsync(endpoint);
+            if (result.IsSuccess)
+            {
+                return;
+            }
+
+            await Task.Delay(AutoConnectRetryDelay);
+            await adbConnection.ConnectAsync(endpoint);
+        }
+        catch
+        {
+            // Недоступный адрес не должен мешать остальным.
         }
     }
 }

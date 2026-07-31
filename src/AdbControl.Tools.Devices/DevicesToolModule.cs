@@ -51,6 +51,7 @@ public sealed class DevicesToolModule : IToolModule
                 context.DeviceInventory,
                 context.DeviceDiscovery,
                 context.MdnsDiscovery,
+                context.DeviceInventorySync,
                 context.AdbConnection,
                 context.DeviceAliases,
                 context.AutoConnectDevices,

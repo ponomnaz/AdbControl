@@ -187,7 +187,7 @@ public sealed class DevicesToolViewModel : ObservableObject
                 var row = new KnownDeviceRowViewModel(
                     device,
                     GetDeviceKey(device),
-                    device.NetworkEndpoint ?? "USB",
+                    device.NetworkEndpoint ?? AdbTransportName.Describe(device.Id),
                     GetConnectionLabel(device.PreferredConnection),
                     GetReachabilityLabel(device.Reachability));
 

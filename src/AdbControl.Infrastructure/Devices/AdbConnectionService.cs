@@ -1,4 +1,5 @@
 using AdbControl.Application.Devices;
+using AdbControl.Core.Devices;
 
 namespace AdbControl.Infrastructure.Devices;
 
@@ -65,7 +66,7 @@ public sealed class AdbConnectionService : IAdbConnectionService
             : new AdbDisconnectResult(endpoint, false, "Не удалось отключить устройство.");
     }
 
-    public async Task<IReadOnlyList<string>> GetConnectedEndpointsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AdbDeviceEntry>> GetConnectedDevicesAsync(CancellationToken cancellationToken = default)
     {
         var result = await _adbProcessRunner.RunAsync(
             "devices",
@@ -77,7 +78,7 @@ public sealed class AdbConnectionService : IAdbConnectionService
             return [];
         }
 
-        return ParseConnectedEndpoints(result.Stdout);
+        return ParseConnectedDevices(result.Stdout);
     }
 
     public async Task<AdbPairResult> PairAsync(
@@ -206,36 +207,65 @@ public sealed class AdbConnectionService : IAdbConnectionService
                rawMessage.Contains("device not found", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<string> ParseConnectedEndpoints(string stdout)
+    /// <summary>Разбор вывода <c>adb devices</c>. Публичный, чтобы поддаваться проверке отдельно от adb.</summary>
+    public static IReadOnlyList<AdbDeviceEntry> ParseConnectedDevices(string stdout)
     {
-        var endpoints = new List<string>();
+        var entries = new List<AdbDeviceEntry>();
+        var seenSerials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var rawLine in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var line = rawLine.Trim();
-            if (string.IsNullOrWhiteSpace(line) ||
-                line.StartsWith("List of devices attached", StringComparison.OrdinalIgnoreCase))
+            if (line.Length == 0 ||
+                line.StartsWith("List of devices attached", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("*", StringComparison.Ordinal))
             {
                 continue;
             }
 
             var parts = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2 || !string.Equals(parts[1], "device", StringComparison.OrdinalIgnoreCase))
+            if (parts.Length < 2)
             {
                 continue;
             }
 
-            var endpoint = parts[0].Trim();
-            if (IsIpv4Endpoint(endpoint))
+            var serial = parts[0].Trim();
+            if (serial.Length == 0 || !seenSerials.Add(serial))
             {
-                endpoints.Add(endpoint);
+                continue;
             }
+
+            // Сетевых транспортов два вида: обычный ip:порт и mDNS-имя беспроводной
+            // отладки. Второе тоже сеть, но adb connect по нему не работает.
+            var isConnectableEndpoint = IsIpv4Endpoint(serial);
+            var isNetwork = isConnectableEndpoint || IsMdnsTransport(serial);
+
+            entries.Add(new AdbDeviceEntry(
+                serial,
+                isNetwork ? DeviceConnectionKind.Network : DeviceConnectionKind.Usb,
+                ParseDeviceState(parts[1]),
+                isConnectableEndpoint));
         }
 
-        return endpoints
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        return entries
+            .OrderBy(entry => entry.Serial, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool IsMdnsTransport(string serial)
+    {
+        return serial.Contains("._tcp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AdbDeviceState ParseDeviceState(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "device" => AdbDeviceState.Device,
+            "offline" => AdbDeviceState.Offline,
+            "unauthorized" => AdbDeviceState.Unauthorized,
+            _ => AdbDeviceState.Unknown
+        };
     }
 
     private static bool IsIpv4Endpoint(string value)

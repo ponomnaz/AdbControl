@@ -18,6 +18,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private readonly DeviceInventoryState _deviceInventory;
     private readonly IDeviceDiscoveryService _deviceDiscoveryService;
     private readonly IMdnsDiscoveryService _mdnsDiscoveryService;
+    private readonly DeviceInventorySyncService _deviceInventorySync;
     private readonly IAdbConnectionService _adbConnectionService;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
@@ -44,6 +45,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         DeviceInventoryState deviceInventory,
         IDeviceDiscoveryService deviceDiscoveryService,
         IMdnsDiscoveryService mdnsDiscoveryService,
+        DeviceInventorySyncService deviceInventorySync,
         IAdbConnectionService adbConnectionService,
         DeviceAliasCatalog deviceAliases,
         AutoConnectDeviceCatalog autoConnectDevices,
@@ -52,6 +54,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         _deviceInventory = deviceInventory;
         _deviceDiscoveryService = deviceDiscoveryService;
         _mdnsDiscoveryService = mdnsDiscoveryService;
+        _deviceInventorySync = deviceInventorySync;
         _adbConnectionService = adbConnectionService;
         _deviceAliases = deviceAliases;
         _autoConnectDevices = autoConnectDevices;
@@ -100,6 +103,17 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             endpoint => _ = ToggleAutoConnectAsync(endpoint),
             endpoint => CanToggleAutoConnect(endpoint));
 
+        BeginPairingCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(
+            row => row?.BeginPairingEntry(),
+            _ => !IsBusy());
+
+        SubmitPairingCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(
+            row => _ = PairFromRowAsync(row),
+            row => !IsBusy() && !string.IsNullOrWhiteSpace(row?.PairingCodeDraft));
+
+        CancelPairingCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(
+            row => row?.EndPairingEntry());
+
         BeginEditAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(BeginEditAlias);
         SaveAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(row => _ = SaveAliasAsync(row));
         CancelAliasCommand = new RelayCommand<DiscoveredDeviceItemViewModel>(CancelAliasEdit);
@@ -141,6 +155,12 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public RelayCommand DisconnectSelectedCommand { get; }
 
     public RelayCommand<string> ToggleAutoConnectCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> BeginPairingCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> SubmitPairingCommand { get; }
+
+    public RelayCommand<DiscoveredDeviceItemViewModel> CancelPairingCommand { get; }
 
     public RelayCommand<DiscoveredDeviceItemViewModel> BeginEditAliasCommand { get; }
 
@@ -570,6 +590,77 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         return separatorIndex > 0 ? endpoint[..separatorIndex] : null;
     }
 
+    /// <summary>
+    /// Сопряжение прямо из строки списка: устройство сначала находится само,
+    /// код спрашивается только когда до него дошло дело.
+    /// </summary>
+    private async Task PairFromRowAsync(DiscoveredDeviceItemViewModel? row)
+    {
+        if (row is null || string.IsNullOrWhiteSpace(row.PairingCodeDraft))
+        {
+            return;
+        }
+
+        var pairEndpoint = row.Endpoint;
+        var pairingCode = row.PairingCodeDraft.Trim();
+
+        try
+        {
+            _isPairing = true;
+            NotifyCommandStateChanged();
+
+            row.Status = "Сопряжение...";
+            var pairResult = await _adbConnectionService.PairAsync(pairEndpoint, pairingCode);
+
+            if (!pairResult.IsSuccess)
+            {
+                row.Status = "Нужен код";
+                StatusText = pairResult.Message;
+                return;
+            }
+
+            row.EndPairingEntry();
+            row.Status = "Ищу порт подключения...";
+            StatusText = "Сопряжено, ищу порт подключения...";
+
+            var connectEndpoint = await WaitForMdnsConnectEndpointAsync(pairEndpoint);
+            if (connectEndpoint is null)
+            {
+                row.Status = "Сопряжено";
+                StatusText = "Сопряжено. Порт подключения ещё не объявлен — нажми «Сканировать» через пару секунд.";
+                return;
+            }
+
+            row.Status = "Подключение...";
+            var connectedDevices = await ConnectEndpointsAsync(
+                [new ConnectRequest(connectEndpoint, _ => { })]);
+
+            // Порт сопряжения одноразовый: дальше устройство живёт на порту подключения.
+            DiscoveredDevices.Remove(row);
+            EnsureVisibleEndpoint(connectEndpoint);
+
+            if (connectedDevices.Count > 0)
+            {
+                MarkEndpointStatus(connectEndpoint, "Уже подключено");
+                StatusText = "Сопряжено и подключено.";
+            }
+            else
+            {
+                StatusText = "Сопряжено, но подключиться не удалось.";
+            }
+        }
+        catch (Exception ex)
+        {
+            row.Status = "Нужен код";
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            _isPairing = false;
+            NotifyCommandStateChanged();
+        }
+    }
+
     private async Task ScanIntoListAsync(ScanProfile profile, CancellationToken cancellationToken)
     {
         var scanProgress = new Progress<ScanProgress>(OnScanProgress);
@@ -605,6 +696,39 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
 
         existing.ApplyDiscovery(model ?? FindDiscoveredModel(endpoint), state);
         existing.Status = status;
+    }
+
+    /// <summary>
+    /// Строка для устройства, ждущего код сопряжения. Держим её наверху списка:
+    /// окно сопряжения на устройстве живёт недолго.
+    /// </summary>
+    private void AddPairingCandidate(MdnsAdbService service)
+    {
+        // Запасной путь на случай, когда устройство видно, а строку трогать не хотят.
+        if (string.IsNullOrWhiteSpace(PairEndpointInput))
+        {
+            PairEndpointInput = service.Endpoint;
+        }
+
+        var existing = FindDiscoveredItem(service.Endpoint);
+        if (existing is not null)
+        {
+            existing.ApplyDiscovery(GetMdnsInstanceModel(service), AdbEndpointState.PairingRequired);
+            return;
+        }
+
+        var item = CreateDiscoveredItem(
+            service.Endpoint,
+            "Нужен код",
+            AdbEndpointState.PairingRequired,
+            GetMdnsInstanceModel(service));
+
+        DiscoveredDevices.Insert(0, item);
+    }
+
+    private string? GetMdnsInstanceModel(MdnsAdbService service)
+    {
+        return FindDiscoveredModel(service.Endpoint) ?? AdbTransportName.Describe(service.InstanceName);
     }
 
     private void AddDiscoveredItemIfMissing(string endpoint, string status)
@@ -656,12 +780,10 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         {
             if (service.Kind == MdnsServiceKind.Pairing)
             {
-                // Порт сопряжения подключением не является — он нужен команде adb pair.
-                if (string.IsNullOrWhiteSpace(PairEndpointInput))
-                {
-                    PairEndpointInput = service.Endpoint;
-                }
-
+                // Устройство в режиме сопряжения показываем строкой в списке: код спросим
+                // при попытке подключения. Пробовать порт сопряжения рукопожатием нельзя,
+                // поэтому целью сканирования он не становится.
+                AddPairingCandidate(service);
                 continue;
             }
 
@@ -962,36 +1084,13 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
             DeviceReachability.Connected);
     }
 
+    /// <summary>
+    /// Модель приходит из двух источников: баннер ADB при сканировании и <c>getprop</c>
+    /// для устройств с включённой авторизацией, которые баннер не отдают.
+    /// </summary>
     private string? FindDiscoveredModel(string endpoint)
     {
-        return _endpointModels.GetValueOrDefault(endpoint);
-    }
-
-    /// <summary>
-    /// Спрашивает модель у подключённых устройств. Сканер её не узнаёт, если на устройстве
-    /// включена авторизация ADB, — зато уже открытый канал adb отвечает без вопросов.
-    /// </summary>
-    private async Task CacheConnectedModelsAsync(IReadOnlyList<string> endpoints)
-    {
-        var missingEndpoints = endpoints
-            .Where(endpoint => !_endpointModels.ContainsKey(endpoint))
-            .ToArray();
-
-        if (missingEndpoints.Length == 0)
-        {
-            return;
-        }
-
-        var resolved = await Task.WhenAll(missingEndpoints.Select(async endpoint =>
-            (Endpoint: endpoint, Model: await _adbConnectionService.GetDeviceModelAsync(endpoint))));
-
-        foreach (var (endpoint, model) in resolved)
-        {
-            if (!string.IsNullOrWhiteSpace(model))
-            {
-                _endpointModels[endpoint] = model;
-            }
-        }
+        return _endpointModels.GetValueOrDefault(endpoint) ?? _deviceInventorySync.GetModel(endpoint);
     }
 
     private bool IsConnected(string endpoint)
@@ -1093,6 +1192,8 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         PairCommand.NotifyCanExecuteChanged();
         SaveProfileCommand.NotifyCanExecuteChanged();
         DeleteProfileCommand.NotifyCanExecuteChanged();
+        BeginPairingCommand.NotifyCanExecuteChanged();
+        SubmitPairingCommand.NotifyCanExecuteChanged();
         ConnectSelectedCommand.NotifyCanExecuteChanged();
         ConnectManualCommand.NotifyCanExecuteChanged();
         DisconnectSelectedCommand.NotifyCanExecuteChanged();
@@ -1194,24 +1295,17 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         _deviceInventory.ReplaceSelection([device]);
     }
 
+    /// <summary>
+    /// Приведение инвентаря к тому, что видит adb, вынесено в общую службу: она же
+    /// подхватывает USB-устройства и работает в фоне независимо от этого инструмента.
+    /// </summary>
     private async Task<IReadOnlyList<string>> SyncConnectedDevicesAsync()
     {
-        var connectedEndpoints = await _adbConnectionService.GetConnectedEndpointsAsync();
-        _deviceInventory.RemoveDisconnectedNetworkDevices(connectedEndpoints);
+        await _deviceInventorySync.SyncOnceAsync();
 
-        await CacheConnectedModelsAsync(connectedEndpoints);
-
-        var adoptedDevices = connectedEndpoints
-            .Where(endpoint => !IsConnected(endpoint))
-            .Select(CreateConnectedDevice)
-            .ToArray();
-
-        if (adoptedDevices.Length > 0)
-        {
-            _deviceInventory.UpsertKnownDevices(adoptedDevices);
-        }
-
-        return connectedEndpoints;
+        // Сетевые транспорты целиком, включая mDNS: USB-серийники сюда не годятся,
+        // а вот беспроводная отладка обязана быть видна, иначе её не отключить.
+        return _deviceInventorySync.ConnectedNetworkTargets;
     }
 
     private bool FilterDiscoveredDevice(object candidate)
@@ -1351,6 +1445,9 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     private bool _isAutoConnectEnabled;
     private string _aliasDraft = string.Empty;
     private bool _isEditingAlias;
+    private bool _requiresPairing;
+    private bool _isEnteringPairingCode;
+    private string _pairingCodeDraft = string.Empty;
     private string? _alias;
     private string? _model;
     private AdbEndpointState _state = AdbEndpointState.Unknown;
@@ -1432,7 +1529,39 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     {
         _model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
         _state = state;
+        RequiresPairing = state == AdbEndpointState.PairingRequired;
         UpdateDisplay();
+    }
+
+    /// <summary>Устройство ждёт код сопряжения — строка предлагает его ввести.</summary>
+    public bool RequiresPairing
+    {
+        get => _requiresPairing;
+        private set => SetProperty(ref _requiresPairing, value);
+    }
+
+    public bool IsEnteringPairingCode
+    {
+        get => _isEnteringPairingCode;
+        private set => SetProperty(ref _isEnteringPairingCode, value);
+    }
+
+    public string PairingCodeDraft
+    {
+        get => _pairingCodeDraft;
+        set => SetProperty(ref _pairingCodeDraft, value);
+    }
+
+    public void BeginPairingEntry()
+    {
+        PairingCodeDraft = string.Empty;
+        IsEnteringPairingCode = true;
+    }
+
+    public void EndPairingEntry()
+    {
+        PairingCodeDraft = string.Empty;
+        IsEnteringPairingCode = false;
     }
 
     public void ApplyAlias(string? alias)
@@ -1467,12 +1596,13 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     {
         // Имя устройства: своё название важнее модели, модель важнее голого адреса.
         var name = _alias ?? _model;
-        Title = name ?? Endpoint;
+        var address = AdbTransportName.Describe(Endpoint);
+        Title = name ?? address;
 
         var details = new List<string>(2);
         if (name is not null)
         {
-            details.Add(Endpoint);
+            details.Add(address);
         }
 
         if (DescribeState(_state) is { } stateHint)
@@ -1489,7 +1619,8 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
         {
             AdbEndpointState.PortOpen => "порт открыт, ADB не ответил",
             AdbEndpointState.AdbUnauthorized => "нужно подтвердить отладку на устройстве",
-            AdbEndpointState.AdbTlsRequired => "нужен TLS, подключение через adb pair",
+            AdbEndpointState.AdbTlsRequired => "беспроводная отладка",
+            AdbEndpointState.PairingRequired => "ждёт код сопряжения",
             _ => null
         };
     }

@@ -6,7 +6,10 @@ public interface IAdbConnectionService
 
     Task<AdbDisconnectResult> DisconnectAsync(string endpoint, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<string>> GetConnectedEndpointsAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Все устройства из <c>adb devices</c>, включая USB и неавторизованные.
+    /// </summary>
+    Task<IReadOnlyList<AdbDeviceEntry>> GetConnectedDevicesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Сопряжение по коду — обязательный шаг для беспроводной отладки Android 11+.

@@ -21,6 +21,7 @@ public sealed record ToolActivationContext(
     IApkDevicePackageService ApkDevicePackages,
     IDeviceDiscoveryService DeviceDiscovery,
     IMdnsDiscoveryService MdnsDiscovery,
+    DeviceInventorySyncService DeviceInventorySync,
     IAdbConnectionService AdbConnection,
     IDeviceActionService DeviceActions,
     IDeviceLogcatService DeviceLogcat,

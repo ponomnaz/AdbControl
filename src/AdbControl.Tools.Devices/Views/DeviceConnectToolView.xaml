@@ -42,6 +42,28 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="PairingPromptStyle" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding RequiresPairing}" Value="True" />
+                        <Condition Binding="{Binding IsEnteringPairingCode}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible" />
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PairingEditorStyle" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEnteringPairingCode}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="AutoConnectToggleButtonStyle" TargetType="ToggleButton">
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
@@ -84,6 +106,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <!-- Пока устройство не сопряжено, автоподключение к нему бессмысленно. -->
+                <DataTrigger Binding="{Binding RequiresPairing}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
     </UserControl.Resources>
@@ -358,6 +386,42 @@
                                     <TextBlock Margin="0,4,0,0"
                                                Style="{StaticResource DiscoveredDeviceSecondaryTextStyle}"
                                                Text="{Binding SecondaryText}" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1"
+                                            Margin="12,0,12,0"
+                                            VerticalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Style="{StaticResource PairingPromptStyle}">
+                                    <Button Command="{Binding DataContext.BeginPairingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"
+                                            Content="Ввести код"
+                                            Style="{DynamicResource SecondaryButtonStyle}"
+                                            ToolTip="Код сопряжения с экрана устройства" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1"
+                                            Margin="12,0,12,0"
+                                            VerticalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Style="{StaticResource PairingEditorStyle}">
+                                    <TextBox MinWidth="110"
+                                             Margin="0,0,8,0"
+                                             Style="{DynamicResource TextBoxInputStyle}"
+                                             Text="{Binding PairingCodeDraft, UpdateSourceTrigger=PropertyChanged}"
+                                             Loaded="OnPairingCodeEditorLoaded"
+                                             IsVisibleChanged="OnPairingCodeEditorIsVisibleChanged"
+                                             KeyDown="OnPairingCodeEditorKeyDown"
+                                             ToolTip="Шестизначный код с экрана устройства" />
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding DataContext.SubmitPairingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"
+                                            Content="Сопрячь"
+                                            Style="{DynamicResource PrimaryButtonStyle}" />
+                                    <Button Command="{Binding DataContext.CancelPairingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"
+                                            Content="Отмена"
+                                            Style="{DynamicResource SecondaryButtonStyle}" />
                                 </StackPanel>
 
                                 <ToggleButton Grid.Column="1"

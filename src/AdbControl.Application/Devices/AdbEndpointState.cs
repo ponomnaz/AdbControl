@@ -18,5 +18,11 @@ public enum AdbEndpointState
     AdbUnauthorized,
 
     /// <summary>ADB отвечает и требует TLS (Android 11+, беспроводная отладка).</summary>
-    AdbTlsRequired
+    AdbTlsRequired,
+
+    /// <summary>
+    /// Устройство объявило службу сопряжения и ждёт шестизначный код.
+    /// Получено из mDNS, а не из рукопожатия: порт сопряжения пробовать бессмысленно.
+    /// </summary>
+    PairingRequired
 }
