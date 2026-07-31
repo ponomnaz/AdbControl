@@ -48,11 +48,15 @@ public partial class App : System.Windows.Application
         var autoConnectStore = new AutoConnectDeviceFileStore(storage.Paths);
         var autoConnectDevices = new AutoConnectDeviceCatalog(autoConnectStore);
         await autoConnectDevices.InitializeAsync();
+        var scanProfileStore = new ScanProfileFileStore(storage.Paths);
+        var scanProfiles = new ScanProfileCatalog(scanProfileStore);
+        await scanProfiles.InitializeAsync();
         var commandTraceStore = new CommandTraceFileStore(storage.Paths);
         var commandTraceJournal = new CommandTraceJournal(commandTraceStore);
         await commandTraceJournal.InitializeAsync();
         var adbProcessRunner = new AdbProcessRunner(commandTraceJournal);
         var deviceDiscovery = new NetworkAdbDiscoveryService();
+        IMdnsDiscoveryService mdnsDiscovery = new AdbMdnsDiscoveryService(adbProcessRunner);
         var adbConnection = new AdbConnectionService(adbProcessRunner);
         IApkDeploymentService apkDeployment = new AdbApkDeploymentService(adbProcessRunner);
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
@@ -84,10 +88,12 @@ public partial class App : System.Windows.Application
             deviceAliases,
             netariumServerEndpoint,
             autoConnectDevices,
+            scanProfiles,
             apkLibrary,
             apkDeployment,
             apkDevicePackages,
             deviceDiscovery,
+            mdnsDiscovery,
             adbConnection,
             deviceActions,
             deviceLogcat,

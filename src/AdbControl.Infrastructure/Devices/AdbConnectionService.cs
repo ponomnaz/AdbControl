@@ -80,6 +80,27 @@ public sealed class AdbConnectionService : IAdbConnectionService
         return ParseConnectedEndpoints(result.Stdout);
     }
 
+    public async Task<AdbPairResult> PairAsync(
+        string endpoint,
+        string pairingCode,
+        CancellationToken cancellationToken = default)
+    {
+        var pairResult = await _adbProcessRunner.RunAsync(
+            $"pair {endpoint} {pairingCode}",
+            cancellationToken,
+            journalArguments: $"pair {endpoint} ******");
+
+        if (!pairResult.Started)
+        {
+            return new AdbPairResult(endpoint, false, "adb.exe не найден. Добавь platform-tools в PATH.");
+        }
+
+        var rawMessage = BuildRawMessage(pairResult.Stdout, pairResult.Stderr);
+        return rawMessage.Contains("successfully paired", StringComparison.OrdinalIgnoreCase)
+            ? new AdbPairResult(endpoint, true, "Сопряжено.")
+            : new AdbPairResult(endpoint, false, TranslatePairFailureMessage(rawMessage));
+    }
+
     public async Task<string?> GetDeviceModelAsync(string endpoint, CancellationToken cancellationToken = default)
     {
         var result = await _adbProcessRunner.RunAsync(
@@ -142,6 +163,25 @@ public sealed class AdbConnectionService : IAdbConnectionService
         }
 
         return "Команда adb завершилась с ошибкой.";
+    }
+
+    private static string TranslatePairFailureMessage(string rawMessage)
+    {
+        if (rawMessage.Contains("wrong password", StringComparison.OrdinalIgnoreCase) ||
+            rawMessage.Contains("connection was dropped", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Неверный код или устройство закрыло окно сопряжения.";
+        }
+
+        if (rawMessage.Contains("failed to connect", StringComparison.OrdinalIgnoreCase) ||
+            rawMessage.Contains("unable to connect", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Не удалось подключиться к порту сопряжения.";
+        }
+
+        return string.IsNullOrWhiteSpace(rawMessage)
+            ? "Сопряжение не удалось."
+            : "Сопряжение не удалось. Проверь адрес, порт и код.";
     }
 
     private static string TranslateDisconnectSuccessMessage(string rawMessage)

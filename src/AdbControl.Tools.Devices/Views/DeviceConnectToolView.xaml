@@ -105,6 +105,8 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -160,6 +162,44 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="Профиль" />
+                    <ComboBox Grid.Column="1"
+                              Margin="8,0,8,0"
+                              VerticalAlignment="Center"
+                              Style="{DynamicResource CompactComboBoxInputStyle}"
+                              ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding SelectedProfile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              DisplayMemberPath="DisplayText"
+                              ToolTip="Сохранённые наборы «сеть + порты»." />
+                    <TextBox Grid.Column="2"
+                             Margin="0,0,8,0"
+                             Style="{DynamicResource TextBoxInputStyle}"
+                             Text="{Binding ProfileNameInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Имя, под которым сохранить текущие «Сеть» и «Порты»." />
+                    <Button Grid.Column="3"
+                            Margin="0,0,8,0"
+                            Command="{Binding SaveProfileCommand}"
+                            Content="Сохранить"
+                            Style="{DynamicResource SecondaryButtonStyle}" />
+                    <Button Grid.Column="4"
+                            Command="{Binding DeleteProfileCommand}"
+                            Content="Удалить"
+                            Style="{DynamicResource DangerButtonStyle}" />
+                </Grid>
+
+                <Grid Grid.Row="3"
+                      Grid.ColumnSpan="2"
+                      Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -183,7 +223,7 @@
                                Text="Порты" />
                     <TextBox Grid.Column="3"
                              MinWidth="120"
-                             Margin="8,0,0,0"
+                             Margin="8,0,8,0"
                              Style="{DynamicResource TextBoxInputStyle}"
                              Text="{Binding PortsInput, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Пусто — 5555. Иначе: 5555-5585 или 5555,5560-5570.">
@@ -192,9 +232,49 @@
                                         Command="{Binding RefreshCommand}" />
                         </TextBox.InputBindings>
                     </TextBox>
+                    <Button Grid.Column="4"
+                            Command="{Binding DeepScanHostCommand}"
+                            Content="Глубокий скан"
+                            Style="{DynamicResource SecondaryButtonStyle}"
+                            ToolTip="Перебрать порты 30000-65535 на одном хосте из поля «Сеть». Занимает минуты, нужен там, куда не долетает mDNS." />
                 </Grid>
 
-                <Grid Grid.Row="3"
+                <Grid Grid.Row="4"
+                      Grid.ColumnSpan="2"
+                      Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="Сопряжение" />
+                    <TextBox Grid.Column="1"
+                             MinWidth="260"
+                             Margin="8,0,8,0"
+                             Style="{DynamicResource TextBoxInputStyle}"
+                             Text="{Binding PairEndpointInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Адрес и порт сопряжения с экрана устройства (Беспроводная отладка → Подключение с помощью кода). Подставляется автоматически, если устройство видно через mDNS." />
+                    <TextBox Grid.Column="2"
+                             MinWidth="120"
+                             Margin="0,0,8,0"
+                             Style="{DynamicResource TextBoxInputStyle}"
+                             Text="{Binding PairCodeInput, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Шестизначный код с экрана устройства.">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter"
+                                        Command="{Binding PairCommand}" />
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button Grid.Column="3"
+                            Command="{Binding PairCommand}"
+                            Content="Сопрячь"
+                            Style="{DynamicResource SecondaryButtonStyle}" />
+                </Grid>
+
+                <Grid Grid.Row="5"
                       Grid.ColumnSpan="2"
                       Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>

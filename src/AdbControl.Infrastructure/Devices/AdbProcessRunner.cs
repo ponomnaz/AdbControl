@@ -19,11 +19,14 @@ public sealed class AdbProcessRunner
         string arguments,
         CancellationToken cancellationToken,
         Func<AdbProcessResult, bool>? isErrorEvaluator = null,
-        bool recordInJournal = true)
+        bool recordInJournal = true,
+        string? journalArguments = null)
     {
-        var commandText = string.IsNullOrWhiteSpace(arguments)
+        // journalArguments позволяет не писать в журнал секреты вроде кода сопряжения.
+        var recordedArguments = journalArguments ?? arguments;
+        var commandText = string.IsNullOrWhiteSpace(recordedArguments)
             ? "adb"
-            : $"adb {arguments}";
+            : $"adb {recordedArguments}";
 
         using var process = new Process
         {

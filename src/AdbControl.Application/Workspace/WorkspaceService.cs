@@ -18,10 +18,12 @@ public sealed class WorkspaceService : ObservableObject
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly NetariumServerEndpointCatalog _netariumServerEndpoint;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
+    private readonly ScanProfileCatalog _scanProfiles;
     private readonly IApkLibraryService _apkLibrary;
     private readonly IApkDeploymentService _apkDeployment;
     private readonly IApkDevicePackageService _apkDevicePackages;
     private readonly IDeviceDiscoveryService _deviceDiscovery;
+    private readonly IMdnsDiscoveryService _mdnsDiscovery;
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
     private readonly IDeviceLogcatService _deviceLogcat;
@@ -37,10 +39,12 @@ public sealed class WorkspaceService : ObservableObject
         DeviceAliasCatalog deviceAliases,
         NetariumServerEndpointCatalog netariumServerEndpoint,
         AutoConnectDeviceCatalog autoConnectDevices,
+        ScanProfileCatalog scanProfiles,
         IApkLibraryService apkLibrary,
         IApkDeploymentService apkDeployment,
         IApkDevicePackageService apkDevicePackages,
         IDeviceDiscoveryService deviceDiscovery,
+        IMdnsDiscoveryService mdnsDiscovery,
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
         IDeviceLogcatService deviceLogcat,
@@ -54,10 +58,12 @@ public sealed class WorkspaceService : ObservableObject
         _deviceAliases = deviceAliases;
         _netariumServerEndpoint = netariumServerEndpoint;
         _autoConnectDevices = autoConnectDevices;
+        _scanProfiles = scanProfiles;
         _apkLibrary = apkLibrary;
         _apkDeployment = apkDeployment;
         _apkDevicePackages = apkDevicePackages;
         _deviceDiscovery = deviceDiscovery;
+        _mdnsDiscovery = mdnsDiscovery;
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
         _deviceLogcat = deviceLogcat;
@@ -167,10 +173,12 @@ public sealed class WorkspaceService : ObservableObject
             _deviceAliases,
             _netariumServerEndpoint,
             _autoConnectDevices,
+            _scanProfiles,
             _apkLibrary,
             _apkDeployment,
             _apkDevicePackages,
             _deviceDiscovery,
+            _mdnsDiscovery,
             _adbConnection,
             _deviceActions,
             _deviceLogcat,

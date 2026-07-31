@@ -11,11 +11,17 @@ namespace AdbControl.Tools.Devices.ViewModels;
 
 public sealed class DeviceConnectToolViewModel : ObservableObject
 {
+    private const int MdnsConnectAttempts = 8;
+    private static readonly TimeSpan MdnsConnectRetryDelay = TimeSpan.FromMilliseconds(700);
+
+
     private readonly DeviceInventoryState _deviceInventory;
     private readonly IDeviceDiscoveryService _deviceDiscoveryService;
+    private readonly IMdnsDiscoveryService _mdnsDiscoveryService;
     private readonly IAdbConnectionService _adbConnectionService;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
+    private readonly ScanProfileCatalog _scanProfiles;
     private readonly Dictionary<string, string> _endpointModels = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _scanCancellation;
     private ScanProgress? _scanProgress;
@@ -23,35 +29,60 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private bool _isConnecting;
     private bool _isDisconnecting;
     private bool _isTogglingAutoConnect;
+    private bool _isPairing;
+    private string _pairEndpointInput = string.Empty;
+    private string _pairCodeInput = string.Empty;
     private string _statusText = string.Empty;
     private string _endpointInput = string.Empty;
     private string _scanTargetInput = string.Empty;
     private string _portsInput = string.Empty;
+    private string _profileNameInput = string.Empty;
+    private ScanProfileOptionViewModel? _selectedProfile;
     private double _scanProgressFraction;
 
     public DeviceConnectToolViewModel(
         DeviceInventoryState deviceInventory,
         IDeviceDiscoveryService deviceDiscoveryService,
+        IMdnsDiscoveryService mdnsDiscoveryService,
         IAdbConnectionService adbConnectionService,
         DeviceAliasCatalog deviceAliases,
-        AutoConnectDeviceCatalog autoConnectDevices)
+        AutoConnectDeviceCatalog autoConnectDevices,
+        ScanProfileCatalog scanProfiles)
     {
         _deviceInventory = deviceInventory;
         _deviceDiscoveryService = deviceDiscoveryService;
+        _mdnsDiscoveryService = mdnsDiscoveryService;
         _adbConnectionService = adbConnectionService;
         _deviceAliases = deviceAliases;
         _autoConnectDevices = autoConnectDevices;
+        _scanProfiles = scanProfiles;
 
         DiscoveredDevicesView = CollectionViewSource.GetDefaultView(DiscoveredDevices);
         DiscoveredDevicesView.Filter = FilterDiscoveredDevice;
 
         RefreshCommand = new RelayCommand(
             () => _ = RefreshAsync(),
-            () => !_isScanning && !_isConnecting && !_isDisconnecting && !_isTogglingAutoConnect);
+            () => !IsBusy());
 
         StopScanCommand = new RelayCommand(
             () => _scanCancellation?.Cancel(),
             () => _isScanning);
+
+        DeepScanHostCommand = new RelayCommand(
+            () => _ = DeepScanHostAsync(),
+            () => CanDeepScanHost());
+
+        PairCommand = new RelayCommand(
+            () => _ = PairAsync(),
+            () => CanPair());
+
+        SaveProfileCommand = new RelayCommand(
+            () => _ = SaveProfileAsync(),
+            () => CanSaveProfile());
+
+        DeleteProfileCommand = new RelayCommand(
+            () => _ = DeleteProfileAsync(),
+            () => CanDeleteProfile());
 
         ConnectSelectedCommand = new RelayCommand(
             () => _ = ConnectSelectedAsync(),
@@ -78,6 +109,8 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         _deviceInventory.KnownDevices.CollectionChanged += OnKnownDevicesChanged;
         _deviceAliases.Changed += OnAliasesChanged;
         _autoConnectDevices.Changed += OnAutoConnectCatalogChanged;
+        _scanProfiles.Changed += OnScanProfilesChanged;
+        RefreshProfiles();
         _ = RefreshAsync();
     }
 
@@ -90,6 +123,16 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public RelayCommand RefreshCommand { get; }
 
     public RelayCommand StopScanCommand { get; }
+
+    public RelayCommand DeepScanHostCommand { get; }
+
+    public RelayCommand PairCommand { get; }
+
+    public RelayCommand SaveProfileCommand { get; }
+
+    public RelayCommand DeleteProfileCommand { get; }
+
+    public ObservableCollection<ScanProfileOptionViewModel> Profiles { get; } = [];
 
     public RelayCommand ConnectSelectedCommand { get; }
 
@@ -134,7 +177,13 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     public string ScanTargetInput
     {
         get => _scanTargetInput;
-        set => SetProperty(ref _scanTargetInput, value);
+        set
+        {
+            if (SetProperty(ref _scanTargetInput, value))
+            {
+                DeepScanHostCommand.NotifyCanExecuteChanged();
+            }
+        }
     }
 
     /// <summary>Порты для проверки; пусто — 5555.</summary>
@@ -142,6 +191,59 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     {
         get => _portsInput;
         set => SetProperty(ref _portsInput, value);
+    }
+
+    /// <summary>Выбор в списке сохранённых профилей загружает его в поля «Сеть» и «Порты».</summary>
+    public ScanProfileOptionViewModel? SelectedProfile
+    {
+        get => _selectedProfile;
+        set
+        {
+            if (SetProperty(ref _selectedProfile, value))
+            {
+                ApplyProfile(value?.Name);
+            }
+        }
+    }
+
+    /// <summary>Имя, под которым сохраняется текущая пара «цели + порты».</summary>
+    public string ProfileNameInput
+    {
+        get => _profileNameInput;
+        set
+        {
+            if (SetProperty(ref _profileNameInput, value))
+            {
+                SaveProfileCommand.NotifyCanExecuteChanged();
+                DeleteProfileCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Адрес порта сопряжения Android 11+, подставляется из mDNS при обнаружении.</summary>
+    public string PairEndpointInput
+    {
+        get => _pairEndpointInput;
+        set
+        {
+            if (SetProperty(ref _pairEndpointInput, value))
+            {
+                PairCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Шестизначный код с экрана устройства.</summary>
+    public string PairCodeInput
+    {
+        get => _pairCodeInput;
+        set
+        {
+            if (SetProperty(ref _pairCodeInput, value))
+            {
+                PairCommand.NotifyCanExecuteChanged();
+            }
+        }
     }
 
     public bool IsScanning
@@ -184,9 +286,9 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
 
     private async Task RefreshAsync()
     {
-        if (!TryBuildScanProfile(out var profile, out var profileError))
+        if (!TryParseScanInputs(out var userTargets, out var ports, out var inputError))
         {
-            StatusText = profileError ?? "Неверная цель сканирования";
+            StatusText = inputError ?? "Неверная цель сканирования";
             return;
         }
 
@@ -195,43 +297,40 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
 
         try
         {
-            IsScanning = true;
-            _scanProgress = null;
-            ScanProgressFraction = 0d;
-            NotifyCommandStateChanged();
+            BeginScan();
 
             SelectedCandidates.Clear();
             DiscoveredDevices.Clear();
-            StatusText = "Поиск...";
-
-            var seenEndpoints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Уже подключённые устройства показываем независимо от того, попадают ли
             // они в зону сканирования: проброшенный endpoint иначе остаётся невидимым.
             foreach (var endpoint in await SyncConnectedDevicesAsync())
             {
-                if (seenEndpoints.Add(endpoint))
-                {
-                    DiscoveredDevices.Add(CreateDiscoveredItem(endpoint, "Уже подключено"));
-                }
+                AddDiscoveredItemIfMissing(endpoint, "Уже подключено");
             }
 
-            var scanProgress = new Progress<ScanProgress>(OnScanProgress);
-
-            await foreach (var discovered in _deviceDiscoveryService.DiscoverAsync(
-                               profile,
-                               scanProgress,
-                               scanCancellation.Token))
+            // Устройства из автоподключения показываем всегда, даже недоступные: иначе их
+            // не видно в списке и нельзя снять с автозапуска, пока они вне зоны скана.
+            var autoConnectEndpoints = _autoConnectDevices.GetEndpoints();
+            foreach (var endpoint in autoConnectEndpoints)
             {
-                if (seenEndpoints.Add(discovered.Endpoint))
-                {
-                    DiscoveredDevices.Add(CreateDiscoveredItem(
-                        discovered.Endpoint,
-                        IsConnected(discovered.Endpoint) ? "Уже подключено" : "Готово",
-                        discovered.State,
-                        discovered.Model));
-                }
+                AddDiscoveredItemIfMissing(endpoint, "Не отвечает");
             }
+
+            var targets = new List<ScanTargetSpec>(
+                userTargets.Count == 0 ? [new AutoLocalScanTarget()] : userTargets);
+
+            targets.AddRange(await CollectMdnsTargetsAsync(scanCancellation.Token));
+
+            // Закреплённые адреса проверяем явно — так их состояние обновится,
+            // даже если они лежат вне сканируемой подсети.
+            targets.AddRange(autoConnectEndpoints
+                .Select(ParseSingleTarget)
+                .OfType<ScanTargetSpec>());
+
+            await ScanIntoListAsync(
+                ScanProfile.ForTargets(targets, ports),
+                scanCancellation.Token);
 
             RefreshAutoConnectFlags();
             StatusText = string.Empty;
@@ -251,33 +350,386 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         }
         finally
         {
-            _scanCancellation = null;
-            _scanProgress = null;
-            ScanProgressFraction = 0d;
-            IsScanning = false;
+            EndScan();
+        }
+    }
+
+    /// <summary>
+    /// Перебор всего диапазона беспроводной отладки на одном хосте. Отдельная команда,
+    /// потому что для подсети такой объём проб недопустим. Нужен там, куда не долетает mDNS.
+    /// </summary>
+    private async Task DeepScanHostAsync()
+    {
+        if (!TryBuildDeepScanTarget(out var target, out var targetError))
+        {
+            StatusText = targetError ?? "Укажи один хост в поле «Сеть»";
+            return;
+        }
+
+        using var scanCancellation = new CancellationTokenSource();
+        _scanCancellation = scanCancellation;
+
+        try
+        {
+            BeginScan();
+            StatusText = $"Глубокий скан {target.Label}: порты 30000-65535, это займёт минуты";
+
+            // Дополняем список, а не затираем: результаты обычного скана остаются на месте.
+            await ScanIntoListAsync(
+                ScanProfile.DeepHostScan(target),
+                scanCancellation.Token);
+
+            RefreshAutoConnectFlags();
+            StatusText = "Глубокий скан завершён";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Сканирование остановлено";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            EndScan();
+        }
+    }
+
+    private async Task PairAsync()
+    {
+        try
+        {
+            _isPairing = true;
+            NotifyCommandStateChanged();
+            StatusText = "Сопряжение...";
+
+            var pairEndpoint = PairEndpointInput.Trim();
+            var pairResult = await _adbConnectionService.PairAsync(pairEndpoint, PairCodeInput.Trim());
+
+            if (!pairResult.IsSuccess)
+            {
+                StatusText = pairResult.Message;
+                return;
+            }
+
+            // Код одноразовый — держать его в поле незачем.
+            PairCodeInput = string.Empty;
+            StatusText = "Сопряжено, ищу порт подключения...";
+
+            var connectEndpoint = await WaitForMdnsConnectEndpointAsync(pairEndpoint);
+            if (connectEndpoint is null)
+            {
+                StatusText = "Сопряжено. Порт подключения ещё не объявлен — нажми «Сканировать» через пару секунд.";
+                return;
+            }
+
+            StatusText = "Сопряжено, подключаюсь...";
+            var connectedDevices = await ConnectEndpointsAsync(
+                [new ConnectRequest(connectEndpoint, _ => { })]);
+
+            EnsureVisibleEndpoint(connectEndpoint);
+
+            if (connectedDevices.Count > 0)
+            {
+                MarkEndpointStatus(connectEndpoint, "Уже подключено");
+                StatusText = "Сопряжено и подключено.";
+            }
+            else
+            {
+                StatusText = "Сопряжено, но подключиться не удалось.";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            _isPairing = false;
             NotifyCommandStateChanged();
         }
     }
 
-    private bool TryBuildScanProfile(out ScanProfile profile, out string? error)
+    /// <summary>
+    /// После сопряжения устройство переобъявляет службу подключения не сразу,
+    /// поэтому mDNS опрашивается несколько раз подряд, а не однократно.
+    /// </summary>
+    private async Task SaveProfileAsync()
     {
-        profile = ScanProfile.LocalNetwork;
+        var name = ProfileNameInput.Trim();
+
+        try
+        {
+            await _scanProfiles.SaveAsync(new SavedScanProfile(name, ScanTargetInput.Trim(), PortsInput.Trim()));
+            SetSelectedProfileWithoutReload(name);
+            StatusText = $"Профиль «{name}» сохранён";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteProfileAsync()
+    {
+        var name = ProfileNameInput.Trim();
+
+        try
+        {
+            await _scanProfiles.DeleteAsync(name);
+            SetSelectedProfileWithoutReload(null);
+            StatusText = $"Профиль «{name}» удалён";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+    }
+
+    private void ApplyProfile(string? name)
+    {
+        if (_scanProfiles.Find(name) is not { } profile)
+        {
+            return;
+        }
+
+        ScanTargetInput = profile.Targets;
+        PortsInput = profile.Ports;
+        ProfileNameInput = profile.Name;
+    }
+
+    private void OnScanProfilesChanged(object? sender, EventArgs e)
+    {
+        RefreshProfiles();
+    }
+
+    private void RefreshProfiles()
+    {
+        var previousName = _selectedProfile?.Name;
+
+        Profiles.Clear();
+        foreach (var profile in _scanProfiles.GetProfiles())
+        {
+            Profiles.Add(ScanProfileOptionViewModel.FromProfile(profile));
+        }
+
+        SetSelectedProfileWithoutReload(previousName);
+
+        SaveProfileCommand.NotifyCanExecuteChanged();
+        DeleteProfileCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Меняет выделение, не перезаписывая поля «Сеть» и «Порты»: иначе обновление списка
+    /// затирало бы правки, которые пользователь ещё не сохранил.
+    /// </summary>
+    private void SetSelectedProfileWithoutReload(string? name)
+    {
+        _selectedProfile = name is null
+            ? null
+            : Profiles.FirstOrDefault(option =>
+                string.Equals(option.Name, name, StringComparison.CurrentCultureIgnoreCase));
+
+        OnPropertyChanged(nameof(SelectedProfile));
+    }
+
+    private async Task<string?> WaitForMdnsConnectEndpointAsync(string pairEndpoint)
+    {
+        var pairHost = ExtractHost(pairEndpoint);
+
+        for (var attempt = 0; attempt < MdnsConnectAttempts; attempt++)
+        {
+            try
+            {
+                var services = await _mdnsDiscoveryService.DiscoverAsync();
+
+                var match = services.FirstOrDefault(service =>
+                    service.Kind is MdnsServiceKind.Connect or MdnsServiceKind.Legacy &&
+                    (pairHost is null || string.Equals(service.Host, pairHost, StringComparison.OrdinalIgnoreCase)));
+
+                if (match is not null)
+                {
+                    return match.Endpoint;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+
+            await Task.Delay(MdnsConnectRetryDelay);
+        }
+
+        return null;
+    }
+
+    private static string? ExtractHost(string endpoint)
+    {
+        var separatorIndex = endpoint.LastIndexOf(':');
+        return separatorIndex > 0 ? endpoint[..separatorIndex] : null;
+    }
+
+    private async Task ScanIntoListAsync(ScanProfile profile, CancellationToken cancellationToken)
+    {
+        var scanProgress = new Progress<ScanProgress>(OnScanProgress);
+
+        await foreach (var discovered in _deviceDiscoveryService.DiscoverAsync(
+                           profile,
+                           scanProgress,
+                           cancellationToken))
+        {
+            UpsertDiscoveredItem(discovered.Endpoint, discovered.State, discovered.Model);
+        }
+    }
+
+    /// <summary>
+    /// Обновляет уже показанную строку, а не пропускает её: у закреплённых и подключённых
+    /// адресов состояние и модель становятся известны только после ответа на пробу.
+    /// </summary>
+    private void UpsertDiscoveredItem(string endpoint, AdbEndpointState state, string? model)
+    {
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            _endpointModels[endpoint] = model;
+        }
+
+        var status = IsConnected(endpoint) ? "Уже подключено" : "Готово";
+        var existing = FindDiscoveredItem(endpoint);
+
+        if (existing is null)
+        {
+            DiscoveredDevices.Add(CreateDiscoveredItem(endpoint, status, state, model));
+            return;
+        }
+
+        existing.ApplyDiscovery(model ?? FindDiscoveredModel(endpoint), state);
+        existing.Status = status;
+    }
+
+    private void AddDiscoveredItemIfMissing(string endpoint, string status)
+    {
+        if (FindDiscoveredItem(endpoint) is null)
+        {
+            DiscoveredDevices.Add(CreateDiscoveredItem(endpoint, status));
+        }
+    }
+
+    private DiscoveredDeviceItemViewModel? FindDiscoveredItem(string endpoint)
+    {
+        return DiscoveredDevices.FirstOrDefault(item =>
+            string.Equals(item.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ScanTargetSpec? ParseSingleTarget(string value)
+    {
+        return ScanTargetParser.TryParse(value, out var targets, out _) && targets.Count == 1
+            ? targets[0]
+            : null;
+    }
+
+    /// <summary>
+    /// Службы, объявленные через mDNS. Их адреса прогоняются через тот же сканер,
+    /// чтобы состояние и модель определялись единым способом.
+    /// </summary>
+    private async Task<IReadOnlyList<ScanTargetSpec>> CollectMdnsTargetsAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MdnsAdbService> services;
+
+        try
+        {
+            services = await _mdnsDiscoveryService.DiscoverAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // Отсутствие mDNS-демона не должно ломать обычное сканирование.
+            return [];
+        }
+
+        var targets = new List<ScanTargetSpec>();
+
+        foreach (var service in services)
+        {
+            if (service.Kind == MdnsServiceKind.Pairing)
+            {
+                // Порт сопряжения подключением не является — он нужен команде adb pair.
+                if (string.IsNullOrWhiteSpace(PairEndpointInput))
+                {
+                    PairEndpointInput = service.Endpoint;
+                }
+
+                continue;
+            }
+
+            targets.Add(new EndpointScanTarget(service.Host, service.Port));
+        }
+
+        return targets;
+    }
+
+    private bool TryParseScanInputs(
+        out IReadOnlyList<ScanTargetSpec> targets,
+        out PortSpec ports,
+        out string? error)
+    {
+        ports = PortSpec.Default;
+
+        return ScanTargetParser.TryParse(ScanTargetInput, out targets, out error) &&
+               PortSpec.TryParse(PortsInput, out ports, out error);
+    }
+
+    private bool TryBuildDeepScanTarget(out ScanTargetSpec target, out string? error)
+    {
+        target = new AutoLocalScanTarget();
 
         if (!ScanTargetParser.TryParse(ScanTargetInput, out var targets, out error))
         {
             return false;
         }
 
-        if (!PortSpec.TryParse(PortsInput, out var ports, out error))
+        if (targets.Count != 1)
         {
+            error = "Глубокий скан работает по одному хосту: укажи его в поле «Сеть».";
             return false;
         }
 
-        profile = targets.Count == 0
-            ? ScanProfile.LocalNetwork with { Ports = ports }
-            : ScanProfile.ForTargets(targets, ports);
+        // Явный порт при переборе портов бессмыслен — оставляем только хост.
+        target = targets[0] switch
+        {
+            EndpointScanTarget endpoint => new HostScanTarget(endpoint.Host),
+            HostScanTarget host => host,
+            _ => new AutoLocalScanTarget()
+        };
+
+        if (target is AutoLocalScanTarget)
+        {
+            error = "Глубокий скан работает по одному хосту, а не по подсети или диапазону.";
+            return false;
+        }
 
         return true;
+    }
+
+    private void BeginScan()
+    {
+        IsScanning = true;
+        _scanProgress = null;
+        ScanProgressFraction = 0d;
+        StatusText = "Поиск...";
+        NotifyCommandStateChanged();
+    }
+
+    private void EndScan()
+    {
+        _scanCancellation = null;
+        _scanProgress = null;
+        ScanProgressFraction = 0d;
+        IsScanning = false;
+        NotifyCommandStateChanged();
     }
 
     private void OnScanProgress(ScanProgress progress)
@@ -637,6 +1089,10 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     {
         RefreshCommand.NotifyCanExecuteChanged();
         StopScanCommand.NotifyCanExecuteChanged();
+        DeepScanHostCommand.NotifyCanExecuteChanged();
+        PairCommand.NotifyCanExecuteChanged();
+        SaveProfileCommand.NotifyCanExecuteChanged();
+        DeleteProfileCommand.NotifyCanExecuteChanged();
         ConnectSelectedCommand.NotifyCanExecuteChanged();
         ConnectManualCommand.NotifyCanExecuteChanged();
         DisconnectSelectedCommand.NotifyCanExecuteChanged();
@@ -645,40 +1101,57 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectionSummary));
     }
 
+    private bool IsBusy()
+    {
+        return _isScanning ||
+               _isConnecting ||
+               _isDisconnecting ||
+               _isTogglingAutoConnect ||
+               _isPairing;
+    }
+
     private bool CanConnectManual()
     {
-        return !_isScanning &&
-               !_isConnecting &&
-               !_isDisconnecting &&
-               !_isTogglingAutoConnect &&
-               TryNormalizeEndpoint(EndpointInput, out _);
+        return !IsBusy() && TryNormalizeEndpoint(EndpointInput, out _);
     }
 
     private bool CanConnectSelected()
     {
-        return !_isScanning &&
-               !_isConnecting &&
-               !_isDisconnecting &&
-               !_isTogglingAutoConnect &&
-               SelectedCandidates.Any(x => !IsConnected(x.Endpoint));
+        return !IsBusy() && SelectedCandidates.Any(x => !IsConnected(x.Endpoint));
     }
 
     private bool CanDisconnectSelected()
     {
-        return !_isScanning &&
-               !_isConnecting &&
-               !_isDisconnecting &&
-               !_isTogglingAutoConnect &&
-               SelectedCandidates.Any(x => IsConnected(x.Endpoint));
+        return !IsBusy() && SelectedCandidates.Any(x => IsConnected(x.Endpoint));
     }
 
     private bool CanToggleAutoConnect(string? endpoint)
     {
-        return !_isScanning &&
-               !_isConnecting &&
-               !_isDisconnecting &&
-               !_isTogglingAutoConnect &&
-               !string.IsNullOrWhiteSpace(endpoint);
+        return !IsBusy() && !string.IsNullOrWhiteSpace(endpoint);
+    }
+
+    private bool CanDeepScanHost()
+    {
+        return !IsBusy() && !string.IsNullOrWhiteSpace(ScanTargetInput);
+    }
+
+    private bool CanSaveProfile()
+    {
+        return !IsBusy() && !string.IsNullOrWhiteSpace(ProfileNameInput);
+    }
+
+    private bool CanDeleteProfile()
+    {
+        return !IsBusy() && _scanProfiles.Find(ProfileNameInput) is not null;
+    }
+
+    private bool CanPair()
+    {
+        return !IsBusy() &&
+               !string.IsNullOrWhiteSpace(PairCodeInput) &&
+               ScanTargetParser.TryParse(PairEndpointInput, out var targets, out _) &&
+               targets.Count == 1 &&
+               targets[0] is EndpointScanTarget;
     }
 
     private void EnsureVisibleEndpoint(string endpoint)
@@ -850,6 +1323,24 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
 }
 
 public sealed record ConnectRequest(string Endpoint, Action<string> SetStatus);
+
+/// <summary>
+/// Элемент выпадающего списка профилей. Свойство <see cref="DisplayText"/> —
+/// общая для приложения конвенция отображения в <c>ComboBoxInputStyle</c>.
+/// </summary>
+public sealed record ScanProfileOptionViewModel(string Name, string DisplayText)
+{
+    public static ScanProfileOptionViewModel FromProfile(SavedScanProfile profile)
+    {
+        var targets = string.IsNullOrWhiteSpace(profile.Targets)
+            ? "локальные подсети"
+            : profile.Targets;
+
+        return new ScanProfileOptionViewModel(profile.Name, $"{profile.Name} · {targets}");
+    }
+
+    public override string ToString() => DisplayText;
+}
 
 public sealed class DiscoveredDeviceItemViewModel : ObservableObject
 {

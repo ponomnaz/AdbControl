@@ -9,6 +9,11 @@ public interface IAdbConnectionService
     Task<IReadOnlyList<string>> GetConnectedEndpointsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Сопряжение по коду — обязательный шаг для беспроводной отладки Android 11+.
+    /// </summary>
+    Task<AdbPairResult> PairAsync(string endpoint, string pairingCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Модель подключённого устройства. Нужна для тех, у кого включена авторизация ADB:
     /// анонимной пробе сканера они баннер не отдают.
     /// </summary>

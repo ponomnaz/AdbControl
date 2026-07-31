@@ -50,9 +50,11 @@ public sealed class DevicesToolModule : IToolModule
             context => new DeviceConnectToolViewModel(
                 context.DeviceInventory,
                 context.DeviceDiscovery,
+                context.MdnsDiscovery,
                 context.AdbConnection,
                 context.DeviceAliases,
-                context.AutoConnectDevices),
+                context.AutoConnectDevices,
+                context.ScanProfiles),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);
