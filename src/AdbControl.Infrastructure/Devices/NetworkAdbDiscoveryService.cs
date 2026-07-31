@@ -62,11 +62,21 @@ public sealed class NetworkAdbDiscoveryService : IDeviceDiscoveryService
             var localProbes = probes.Where(static probe => probe.IsLocal).ToArray();
             var remoteProbes = probes.Where(static probe => !probe.IsLocal).ToArray();
 
+            var localSettings = new GroupSettings(
+                tuning.LocalConnectTimeout,
+                tuning.LocalHandshakeTimeout,
+                tuning.VerifyAdbHandshake);
+
+            var remoteSettings = new GroupSettings(
+                tuning.RemoteConnectTimeout,
+                tuning.RemoteHandshakeTimeout,
+                tuning.VerifyAdbHandshake);
+
             // Удалённые цели идут отдельным пулом: длиннее таймаут, ниже параллельность,
             // иначе проброс за NAT либо не успевает ответить, либо захлёбывается.
             await Task.WhenAll(
-                    ProbeGroupAsync(localProbes, tuning.LocalConnectTimeout, tuning.LocalParallelism, writer, counters, cancellationToken),
-                    ProbeGroupAsync(remoteProbes, tuning.RemoteConnectTimeout, tuning.RemoteParallelism, writer, counters, cancellationToken))
+                    ProbeGroupAsync(localProbes, localSettings, tuning.LocalParallelism, writer, counters, cancellationToken),
+                    ProbeGroupAsync(remoteProbes, remoteSettings, tuning.RemoteParallelism, writer, counters, cancellationToken))
                 .ConfigureAwait(false);
 
             counters.ReportFinal();
@@ -84,7 +94,7 @@ public sealed class NetworkAdbDiscoveryService : IDeviceDiscoveryService
 
     private static async Task ProbeGroupAsync(
         IReadOnlyList<ScanProbeTarget> probes,
-        TimeSpan timeout,
+        GroupSettings settings,
         int parallelism,
         ChannelWriter<DiscoveredAdbEndpoint> writer,
         ProbeCounters counters,
@@ -104,16 +114,18 @@ public sealed class NetworkAdbDiscoveryService : IDeviceDiscoveryService
             },
             async (probe, token) =>
             {
-                var responseTime = await TryConnectAsync(probe.Address, probe.Port, timeout, token).ConfigureAwait(false);
+                var outcome = await TryProbeAsync(probe, settings, token).ConfigureAwait(false);
 
-                if (responseTime is { } elapsed)
+                if (outcome is { } found)
                 {
                     writer.TryWrite(new DiscoveredAdbEndpoint(
                         probe.Address.ToString(),
                         probe.Port,
                         $"{probe.Address}:{probe.Port}",
                         probe.NetworkLabel,
-                        elapsed));
+                        found.ResponseTime,
+                        found.State,
+                        found.Model));
 
                     counters.OnFound();
                 }
@@ -122,22 +134,21 @@ public sealed class NetworkAdbDiscoveryService : IDeviceDiscoveryService
             }).ConfigureAwait(false);
     }
 
-    private static async Task<TimeSpan?> TryConnectAsync(
-        IPAddress address,
-        int port,
-        TimeSpan timeout,
+    private static async Task<ProbeOutcome?> TryProbeAsync(
+        ScanProbeTarget probe,
+        GroupSettings settings,
         CancellationToken cancellationToken)
     {
-        using var tcpClient = new TcpClient(address.AddressFamily);
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(timeout);
-
+        using var tcpClient = new TcpClient(probe.Address.AddressFamily);
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            await tcpClient.ConnectAsync(address, port, timeoutCts.Token).ConfigureAwait(false);
-            return stopwatch.Elapsed;
+            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                connectCts.CancelAfter(settings.ConnectTimeout);
+                await tcpClient.ConnectAsync(probe.Address, probe.Port, connectCts.Token).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -147,7 +158,28 @@ public sealed class NetworkAdbDiscoveryService : IDeviceDiscoveryService
         {
             return null;
         }
+
+        var responseTime = stopwatch.Elapsed;
+
+        if (!settings.VerifyAdbHandshake)
+        {
+            return new ProbeOutcome(responseTime, AdbEndpointState.Unknown, null);
+        }
+
+        // Сокет уже открыт — рукопожатие идёт по нему же, второго подключения не требуется.
+        var handshake = await AdbHandshakeProbe
+            .TryHandshakeAsync(tcpClient.GetStream(), settings.HandshakeTimeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new ProbeOutcome(responseTime, handshake.State, handshake.Model);
     }
+
+    private readonly record struct ProbeOutcome(TimeSpan ResponseTime, AdbEndpointState State, string? Model);
+
+    private readonly record struct GroupSettings(
+        TimeSpan ConnectTimeout,
+        TimeSpan HandshakeTimeout,
+        bool VerifyAdbHandshake);
 
     private sealed class ProbeCounters
     {

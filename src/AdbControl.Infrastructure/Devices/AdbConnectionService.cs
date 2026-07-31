@@ -80,6 +80,22 @@ public sealed class AdbConnectionService : IAdbConnectionService
         return ParseConnectedEndpoints(result.Stdout);
     }
 
+    public async Task<string?> GetDeviceModelAsync(string endpoint, CancellationToken cancellationToken = default)
+    {
+        var result = await _adbProcessRunner.RunAsync(
+            $"-s {endpoint} shell getprop ro.product.model",
+            cancellationToken,
+            recordInJournal: false);
+
+        if (!result.Started || result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        var model = result.Stdout.Trim();
+        return string.IsNullOrWhiteSpace(model) ? null : model;
+    }
+
     private static bool IndicatesConnected(string rawMessage)
     {
         return rawMessage.Contains("connected to", StringComparison.OrdinalIgnoreCase) ||

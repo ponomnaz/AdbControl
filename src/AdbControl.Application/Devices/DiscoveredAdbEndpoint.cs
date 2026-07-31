@@ -5,4 +5,11 @@ public sealed record DiscoveredAdbEndpoint(
     int Port,
     string Endpoint,
     string NetworkLabel,
-    TimeSpan ResponseTime);
+    TimeSpan ResponseTime,
+    AdbEndpointState State,
+    string? Model)
+{
+    public bool IsAdb => State is AdbEndpointState.AdbReady
+        or AdbEndpointState.AdbUnauthorized
+        or AdbEndpointState.AdbTlsRequired;
+}

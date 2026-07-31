@@ -16,6 +16,17 @@ public sealed record ScanTuning
 
     public int RemoteParallelism { get; init; } = 24;
 
+    /// <summary>
+    /// Подтверждать ADB рукопожатием, а не считать устройством любой открытый порт.
+    /// Выполняется только для отозвавшихся адресов, поэтому на длительность скана почти не влияет.
+    /// </summary>
+    public bool VerifyAdbHandshake { get; init; } = true;
+
+    /// <summary>Ответ на CNXN: RTT плюс время на реакцию adbd, поэтому запас больше, чем на connect.</summary>
+    public TimeSpan LocalHandshakeTimeout { get; init; } = TimeSpan.FromMilliseconds(900);
+
+    public TimeSpan RemoteHandshakeTimeout { get; init; } = TimeSpan.FromMilliseconds(3000);
+
     /// <summary>Предохранитель: максимум проб (адрес × порт) за один запуск.</summary>
     public int MaxProbeBudget { get; init; } = 4096;
 

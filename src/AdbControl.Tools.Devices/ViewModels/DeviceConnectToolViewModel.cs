@@ -16,6 +16,7 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private readonly IAdbConnectionService _adbConnectionService;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly AutoConnectDeviceCatalog _autoConnectDevices;
+    private readonly Dictionary<string, string> _endpointModels = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _scanCancellation;
     private ScanProgress? _scanProgress;
     private bool _isScanning;
@@ -226,7 +227,9 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
                 {
                     DiscoveredDevices.Add(CreateDiscoveredItem(
                         discovered.Endpoint,
-                        IsConnected(discovered.Endpoint) ? "Уже подключено" : "Готово"));
+                        IsConnected(discovered.Endpoint) ? "Уже подключено" : "Готово",
+                        discovered.State,
+                        discovered.Model));
                 }
             }
 
@@ -495,12 +498,48 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
     private TvDeviceProfile CreateConnectedDevice(string endpoint)
     {
         var alias = _deviceAliases.GetAlias(endpoint);
+        var displayName = string.IsNullOrWhiteSpace(alias)
+            ? FindDiscoveredModel(endpoint) ?? endpoint
+            : alias;
+
         return new TvDeviceProfile(
             endpoint,
-            string.IsNullOrWhiteSpace(alias) ? endpoint : alias,
+            displayName,
             endpoint,
             DeviceConnectionKind.Network,
             DeviceReachability.Connected);
+    }
+
+    private string? FindDiscoveredModel(string endpoint)
+    {
+        return _endpointModels.GetValueOrDefault(endpoint);
+    }
+
+    /// <summary>
+    /// Спрашивает модель у подключённых устройств. Сканер её не узнаёт, если на устройстве
+    /// включена авторизация ADB, — зато уже открытый канал adb отвечает без вопросов.
+    /// </summary>
+    private async Task CacheConnectedModelsAsync(IReadOnlyList<string> endpoints)
+    {
+        var missingEndpoints = endpoints
+            .Where(endpoint => !_endpointModels.ContainsKey(endpoint))
+            .ToArray();
+
+        if (missingEndpoints.Length == 0)
+        {
+            return;
+        }
+
+        var resolved = await Task.WhenAll(missingEndpoints.Select(async endpoint =>
+            (Endpoint: endpoint, Model: await _adbConnectionService.GetDeviceModelAsync(endpoint))));
+
+        foreach (var (endpoint, model) in resolved)
+        {
+            if (!string.IsNullOrWhiteSpace(model))
+            {
+                _endpointModels[endpoint] = model;
+            }
+        }
     }
 
     private bool IsConnected(string endpoint)
@@ -687,6 +726,8 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
         var connectedEndpoints = await _adbConnectionService.GetConnectedEndpointsAsync();
         _deviceInventory.RemoveDisconnectedNetworkDevices(connectedEndpoints);
 
+        await CacheConnectedModelsAsync(connectedEndpoints);
+
         var adoptedDevices = connectedEndpoints
             .Where(endpoint => !IsConnected(endpoint))
             .Select(CreateConnectedDevice)
@@ -718,9 +759,19 @@ public sealed class DeviceConnectToolViewModel : ObservableObject
                item.SecondaryText.Contains(filter, StringComparison.OrdinalIgnoreCase);
     }
 
-    private DiscoveredDeviceItemViewModel CreateDiscoveredItem(string endpoint, string status)
+    private DiscoveredDeviceItemViewModel CreateDiscoveredItem(
+        string endpoint,
+        string status,
+        AdbEndpointState state = AdbEndpointState.Unknown,
+        string? model = null)
     {
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            _endpointModels[endpoint] = model;
+        }
+
         var item = new DiscoveredDeviceItemViewModel(endpoint, status);
+        item.ApplyDiscovery(model ?? FindDiscoveredModel(endpoint), state);
         item.ApplyAlias(_deviceAliases.GetAlias(endpoint));
         item.IsAutoConnectEnabled = _autoConnectDevices.Contains(endpoint);
         return item;
@@ -809,6 +860,9 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     private bool _isAutoConnectEnabled;
     private string _aliasDraft = string.Empty;
     private bool _isEditingAlias;
+    private string? _alias;
+    private string? _model;
+    private AdbEndpointState _state = AdbEndpointState.Unknown;
 
     public DiscoveredDeviceItemViewModel(string endpoint, string status)
     {
@@ -818,6 +872,9 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
     }
 
     public string Endpoint { get; }
+
+    /// <summary>Модель из ADB-баннера, если рукопожатие её вернуло.</summary>
+    public string? Model => _model;
 
     public string Title
     {
@@ -879,28 +936,28 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
         ? "Не подключать при запуске"
         : "Подключать при запуске";
 
+    /// <summary>Результат ADB-рукопожатия: модель устройства и состояние порта.</summary>
+    public void ApplyDiscovery(string? model, AdbEndpointState state)
+    {
+        _model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        _state = state;
+        UpdateDisplay();
+    }
+
     public void ApplyAlias(string? alias)
     {
-        var normalizedAlias = string.IsNullOrWhiteSpace(alias)
-            ? null
-            : alias.Trim();
-
-        Title = normalizedAlias ?? Endpoint;
-        SecondaryText = normalizedAlias is null
-            ? string.Empty
-            : Endpoint;
+        _alias = string.IsNullOrWhiteSpace(alias) ? null : alias.Trim();
+        UpdateDisplay();
 
         if (!IsEditingAlias)
         {
-            AliasDraft = normalizedAlias ?? string.Empty;
+            AliasDraft = _alias ?? string.Empty;
         }
     }
 
     public void BeginAliasEdit()
     {
-        AliasDraft = string.Equals(Title, Endpoint, StringComparison.Ordinal)
-            ? string.Empty
-            : Title;
+        AliasDraft = _alias ?? string.Empty;
         IsEditingAlias = true;
     }
 
@@ -911,9 +968,38 @@ public sealed class DiscoveredDeviceItemViewModel : ObservableObject
 
     public void CancelAliasEdit()
     {
-        AliasDraft = string.Equals(Title, Endpoint, StringComparison.Ordinal)
-            ? string.Empty
-            : Title;
+        AliasDraft = _alias ?? string.Empty;
         IsEditingAlias = false;
+    }
+
+    private void UpdateDisplay()
+    {
+        // Имя устройства: своё название важнее модели, модель важнее голого адреса.
+        var name = _alias ?? _model;
+        Title = name ?? Endpoint;
+
+        var details = new List<string>(2);
+        if (name is not null)
+        {
+            details.Add(Endpoint);
+        }
+
+        if (DescribeState(_state) is { } stateHint)
+        {
+            details.Add(stateHint);
+        }
+
+        SecondaryText = string.Join(" · ", details);
+    }
+
+    private static string? DescribeState(AdbEndpointState state)
+    {
+        return state switch
+        {
+            AdbEndpointState.PortOpen => "порт открыт, ADB не ответил",
+            AdbEndpointState.AdbUnauthorized => "нужно подтвердить отладку на устройстве",
+            AdbEndpointState.AdbTlsRequired => "нужен TLS, подключение через adb pair",
+            _ => null
+        };
     }
 }
