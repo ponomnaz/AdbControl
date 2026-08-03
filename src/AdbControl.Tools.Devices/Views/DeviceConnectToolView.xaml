@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:behaviors="clr-namespace:AdbControl.Tools.Devices.Behaviors"
+             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
@@ -355,7 +355,7 @@
                 <ListBox Margin="0,0,0,0"
                          ItemsSource="{Binding DiscoveredDevicesView}"
                          SelectionMode="Extended"
-                         behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedCandidates}"
+                         behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedCandidates}"
                          Style="{DynamicResource WorkbenchListBoxStyle}"
                          ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
                     <ListBox.ItemTemplate>

@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:behaviors="clr-namespace:AdbControl.Tools.Devices.Behaviors"
+             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
@@ -78,25 +78,64 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Right">
-                        <TextBox Width="220"
-                                 Margin="0,0,8,0"
-                                 Style="{DynamicResource TextBoxInputStyle}"
-                                 Text="{Binding ServerEndpoint, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="IP:порт сервера" />
+                        <ComboBox Width="308"
+                                  Margin="0,0,8,0"
+                                  VerticalAlignment="Center"
+                                  Style="{DynamicResource CompactComboBoxInputStyle}"
+                                  ItemsSource="{Binding Servers}"
+                                  SelectedItem="{Binding SelectedServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  DisplayMemberPath="DisplayText"
+                                  ToolTip="Сохранённые адреса серверов" />
                         <Button Width="88"
                                 Command="{Binding ApplyServerCommand}"
                                 Content="Сервер"
-                                Style="{DynamicResource SecondaryButtonStyle}" />
+                                Style="{DynamicResource SecondaryButtonStyle}"
+                                ToolTip="Прописать адрес на выбранных устройствах" />
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"
                                 Margin="0,8,0,0"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Right">
+                        <TextBox Width="220"
+                                 Margin="0,0,8,0"
+                                 Style="{DynamicResource TextBoxInputStyle}"
+                                 Text="{Binding ServerEndpoint, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="IP:порт сервера" />
+                        <Button Width="84"
+                                Margin="0,0,8,0"
+                                Command="{Binding AddServerCommand}"
+                                Content="Добавить"
+                                Style="{DynamicResource SecondaryButtonStyle}"
+                                ToolTip="Добавить адрес из поля в список" />
+                        <Button Width="84"
+                                Command="{Binding RemoveServerCommand}"
+                                Content="Удалить"
+                                Style="{DynamicResource DangerButtonStyle}"
+                                ToolTip="Убрать адрес из списка" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2"
+                                Margin="0,8,0,0"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Width="100"
+                                Margin="0,0,8,0"
+                                Command="{Binding ScreenshotCommand}"
+                                Content="Скриншот"
+                                Style="{DynamicResource SecondaryButtonStyle}"
+                                ToolTip="Снять экран выбранных устройств, сохранить и открыть" />
+                        <Button Width="124"
+                                Margin="0,0,8,0"
+                                Command="{Binding ClearCacheCommand}"
+                                Content="Очистить кэш"
+                                Style="{DynamicResource SecondaryButtonStyle}"
+                                ToolTip="Погасить Netarium, удалить его кэш и запустить обратно" />
                         <Button Width="124"
                                 Margin="0,0,8,0"
                                 Command="{Binding StopCommand}"
@@ -132,7 +171,7 @@
                          Margin="0,12,0,0"
                          ItemsSource="{Binding KnownDevices}"
                          SelectionMode="Extended"
-                         behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedRows}"
+                         behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedRows}"
                          Style="{DynamicResource WorkbenchListBoxStyle}"
                          ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
                     <ListBox.ItemTemplate>

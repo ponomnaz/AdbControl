@@ -27,7 +27,11 @@ public sealed class LogcatToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "LOG",
                 SortOrder: 16),
-            context => new DeviceLogcatToolViewModel(context.DeviceInventory, context.DeviceAliases, context.DeviceLogcat),
+            context => new DeviceLogcatToolViewModel(
+                context.DeviceInventory,
+                context.DeviceAliases,
+                context.DeviceLogcat,
+                context.LogcatSettings),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);

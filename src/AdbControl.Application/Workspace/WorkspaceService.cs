@@ -27,7 +27,9 @@ public sealed class WorkspaceService : ObservableObject
     private readonly DeviceInventorySyncService _deviceInventorySync;
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
+    private readonly IDeviceScreenshotService _deviceScreenshots;
     private readonly IDeviceLogcatService _deviceLogcat;
+    private readonly LogcatSettingsCatalog _logcatSettings;
     private readonly IAdbConsoleService _adbConsole;
     private readonly IDeviceTopService _deviceTop;
     private readonly IRemoteControlService _remoteControl;
@@ -49,7 +51,9 @@ public sealed class WorkspaceService : ObservableObject
         DeviceInventorySyncService deviceInventorySync,
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
+        IDeviceScreenshotService deviceScreenshots,
         IDeviceLogcatService deviceLogcat,
+        LogcatSettingsCatalog logcatSettings,
         IAdbConsoleService adbConsole,
         IDeviceTopService deviceTop,
         IRemoteControlService remoteControl,
@@ -69,7 +73,9 @@ public sealed class WorkspaceService : ObservableObject
         _deviceInventorySync = deviceInventorySync;
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
+        _deviceScreenshots = deviceScreenshots;
         _deviceLogcat = deviceLogcat;
+        _logcatSettings = logcatSettings;
         _adbConsole = adbConsole;
         _deviceTop = deviceTop;
         _remoteControl = remoteControl;
@@ -185,7 +191,9 @@ public sealed class WorkspaceService : ObservableObject
             _deviceInventorySync,
             _adbConnection,
             _deviceActions,
+            _deviceScreenshots,
             _deviceLogcat,
+            _logcatSettings,
             _adbConsole,
             _deviceTop,
             _remoteControl,

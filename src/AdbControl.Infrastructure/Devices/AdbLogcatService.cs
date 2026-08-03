@@ -117,6 +117,37 @@ public sealed class AdbLogcatService : IDeviceLogcatService
         return DeviceLogcatClearResult.Failure(string.IsNullOrWhiteSpace(errorText) ? "Не удалось очистить буфер." : errorText);
     }
 
+    public async Task<int?> GetProcessIdAsync(
+        TvDeviceProfile device,
+        string packageName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+
+        var targetId = GetTargetId(device);
+        if (string.IsNullOrWhiteSpace(targetId))
+        {
+            return null;
+        }
+
+        var result = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell pidof {packageName}",
+            cancellationToken,
+            recordInJournal: false);
+
+        if (!result.Started)
+        {
+            return null;
+        }
+
+        // pidof возвращает ненулевой код, когда процесса нет, — это не ошибка.
+        var firstPid = result.Stdout
+            .Split([' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+
+        return int.TryParse(firstPid, out var processId) ? processId : null;
+    }
+
     private static string GetTargetId(TvDeviceProfile device)
     {
         return string.IsNullOrWhiteSpace(device.NetworkEndpoint)

@@ -68,7 +68,10 @@ public partial class App : System.Windows.Application
         IApkDeploymentService apkDeployment = new AdbApkDeploymentService(adbProcessRunner);
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
         var deviceActions = new AdbDeviceActionService(adbProcessRunner);
+        IDeviceScreenshotService deviceScreenshots = new AdbScreenshotService(storage.Paths, commandTraceJournal);
         IDeviceLogcatService deviceLogcat = new AdbLogcatService(adbProcessRunner, commandTraceJournal);
+        var logcatSettings = new LogcatSettingsCatalog(new LogcatSettingsFileStore(storage.Paths));
+        await logcatSettings.InitializeAsync();
         IAdbConsoleService adbConsole = new AdbConsoleService(adbProcessRunner);
         var deviceTop = new AdbTopService(adbProcessRunner);
         IRemoteControlService remoteControl = new AdbRemoteControlService(adbProcessRunner, commandTraceJournal);
@@ -104,7 +107,9 @@ public partial class App : System.Windows.Application
             deviceInventorySync,
             adbConnection,
             deviceActions,
+            deviceScreenshots,
             deviceLogcat,
+            logcatSettings,
             adbConsole,
             deviceTop,
             remoteControl,

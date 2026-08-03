@@ -30,6 +30,7 @@ public sealed class DevicesToolModule : IToolModule
             context => new DevicesToolViewModel(
                 context.DeviceInventory,
                 context.DeviceActions,
+                context.DeviceScreenshots,
                 context.DeviceAliases,
                 context.NetariumServerEndpoint),
             ShowInNavigation: true,

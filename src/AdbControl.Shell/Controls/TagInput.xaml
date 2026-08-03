@@ -1,0 +1,100 @@
+<UserControl x:Class="AdbControl.Shell.Controls.TagInput"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:AdbControl.Shell.Controls"
+             x:Name="Root"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+    <Border x:Name="Surface"
+            MinHeight="28"
+            Background="{DynamicResource Brush.SurfacePrimary}"
+            BorderBrush="{DynamicResource Brush.BorderDefault}"
+            BorderThickness="1"
+            CornerRadius="{DynamicResource Radius.Control}"
+            Padding="4,2"
+            MouseLeftButtonDown="OnSurfaceMouseLeftButtonDown">
+        <WrapPanel Orientation="Horizontal"
+                   VerticalAlignment="Center">
+            <ItemsControl ItemsSource="{Binding Items, ElementName=Root}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <!-- Подсказка в кавычках показывает условие дословно:
+                             без неё « D » и «D» на плашке неразличимы. -->
+                        <Border Margin="0,1,4,1"
+                                Padding="7,1,3,2"
+                                Background="{DynamicResource Brush.AccentSelection}"
+                                BorderBrush="{DynamicResource Brush.AccentSoft}"
+                                BorderThickness="1"
+                                CornerRadius="{DynamicResource Radius.Control}"
+                                ToolTip="{Binding StringFormat='«{0}»'}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.TextPrimary}"
+                                           Text="{Binding}" />
+                                <Button Width="16"
+                                        Height="16"
+                                        Margin="5,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Content="✕"
+                                        FontSize="9"
+                                        Cursor="Hand"
+                                        ToolTip="Убрать условие"
+                                        Click="OnRemoveTagClick">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Chrome"
+                                                    Background="Transparent"
+                                                    CornerRadius="8">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Grid MinWidth="90">
+                <TextBlock Margin="3,0,0,0"
+                           VerticalAlignment="Center"
+                           IsHitTestVisible="False"
+                           Foreground="{DynamicResource Brush.TextDisabled}"
+                           Text="{Binding Placeholder, ElementName=Root}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasInputText, ElementName=Root}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBox x:Name="InputBox"
+                         VerticalAlignment="Center"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="2,0"
+                         Foreground="{DynamicResource Brush.TextPrimary}"
+                         CaretBrush="{DynamicResource Brush.TextPrimary}"
+                         PreviewKeyDown="OnInputPreviewKeyDown"
+                         TextChanged="OnInputTextChanged" />
+            </Grid>
+        </WrapPanel>
+    </Border>
+</UserControl>

@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="..\AdbControl.Application\AdbControl.Application.csproj" />
     <ProjectReference Include="..\AdbControl.Core\AdbControl.Core.csproj" />
+    <ProjectReference Include="..\AdbControl.Shell\AdbControl.Shell.csproj" />
   </ItemGroup>
 </Project>

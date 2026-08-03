@@ -3,29 +3,99 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:AdbControl.Shell.Controls;assembly=AdbControl.Shell"
+             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
-        <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+        <Style x:Key="ConsoleListBoxStyle" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="AcceptsReturn" Value="True" />
-            <Setter Property="TextWrapping" Value="NoWrap" />
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
-            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
             <Setter Property="FontFamily" Value="Consolas" />
             <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasVisibleLines}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
-        <ToolTip x:Key="LogcatFilterToolTip"
+        <!-- Строки лога плотные: отступы и рамки контейнера убраны,
+             подсветка выделения оставлена акцентной. -->
+        <Style x:Key="ConsoleLineItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <!-- Список прокручивается по горизонтали, поэтому каждая строка меряется
+                 по своему тексту. Без общей ширины подсветка обрывалась по концу строки
+                 и выглядела рваными блоками. -->
+            <Setter Property="MinWidth"
+                    Value="{Binding ActualWidth, RelativeSource={RelativeSource FindAncestor, AncestorType=ItemsPresenter}}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsSelected" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ToolTip x:Key="LogcatLevelToolTip"
                  Placement="Bottom"
                  ToolTipService.InitialShowDelay="150"
                  ToolTipService.ShowDuration="20000">
-            <TextBlock MaxWidth="260"
-                       Text="Аргументы adb logcat." />
+            <TextBlock MaxWidth="300"
+                       TextWrapping="Wrap"
+                       Text="Порог важности, а не точное совпадение: «Warn и выше» покажет ещё и ошибки. Режет на устройстве — отсечённые строки не придут вовсе." />
+        </ToolTip>
+
+        <ToolTip x:Key="LogcatTagsToolTip"
+                 Placement="Bottom"
+                 ToolTipService.InitialShowDelay="150"
+                 ToolTipService.ShowDuration="20000">
+            <TextBlock MaxWidth="300"
+                       TextWrapping="Wrap"
+                       Text="Оставить только эти теги, остальные заглушить. Теги с двоеточием или пробелом logcat не принимает — такие строки убирай через «Скрывать»." />
+        </ToolTip>
+
+        <ToolTip x:Key="LogcatOnlyAppToolTip"
+                 Placement="Bottom"
+                 ToolTipService.InitialShowDelay="150"
+                 ToolTipService.ShowDuration="20000">
+            <TextBlock MaxWidth="300"
+                       TextWrapping="Wrap"
+                       Text="Только строки процесса cs.netarium. Идентификатор процесса отслеживается: после перезапуска приложения лог переподключится сам." />
+        </ToolTip>
+
+        <ToolTip x:Key="LogcatExtraToolTip"
+                 Placement="Bottom"
+                 ToolTipService.InitialShowDelay="150"
+                 ToolTipService.ShowDuration="20000">
+            <TextBlock MaxWidth="300"
+                       TextWrapping="Wrap"
+                       Text="Сырые аргументы adb logcat для редких случаев: -b all, -v time. Подставляются последними и могут перебить остальные настройки." />
         </ToolTip>
     </UserControl.Resources>
 
@@ -42,32 +112,30 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel>
-                        <TextBlock Style="{DynamicResource Text.PageTitleStyle}" Text="Logcat" />
-                        <StackPanel Margin="0,8,0,0"
-                                    Orientation="Horizontal">
-                            <TextBlock Style="{DynamicResource Text.CaptionStyle}"
+                <!-- Заголовок и действия — тоже переносимая компоновка. В колонке Auto
+                     WrapPanel меряется бесконечной шириной и никогда не переносится,
+                     выдавливая заголовок в ноль: из-за этого «Logcat» и уезжал. -->
+                <WrapPanel>
+                    <StackPanel MinWidth="200"
+                                Margin="0,0,16,8">
+                        <TextBlock Style="{DynamicResource Text.PageTitleStyle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="Logcat" />
+                        <WrapPanel Margin="0,8,0,0">
+                            <TextBlock Margin="0,0,12,0"
+                                       Style="{DynamicResource Text.CaptionStyle}"
                                        Text="{Binding DeviceSummary}" />
-                            <TextBlock Margin="12,0,0,0"
+                            <TextBlock Margin="0,0,12,0"
                                        Style="{DynamicResource Text.CaptionStyle}"
                                        Text="{Binding LineSummary}" />
-                            <TextBlock Margin="12,0,0,0"
-                                       Style="{DynamicResource Text.BodyMutedStyle}"
+                            <TextBlock Style="{DynamicResource Text.BodyMutedStyle}"
+                                       TextTrimming="CharacterEllipsis"
                                        Text="{Binding StatusText}" />
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
 
-                    <WrapPanel Grid.Column="1"
-                               Margin="16,0,0,0"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Bottom">
-                        <ComboBox Width="220"
+                    <WrapPanel VerticalAlignment="Bottom">
+                        <ComboBox Width="200"
                                   Margin="0,0,8,8"
                                   Style="{DynamicResource CompactComboBoxInputStyle}"
                                   ItemsSource="{Binding ConnectedDevices}"
@@ -90,31 +158,111 @@
                                 Content="Стоп"
                                 Style="{DynamicResource DangerButtonStyle}" />
                     </WrapPanel>
-                </Grid>
+                </WrapPanel>
 
+                <!-- Две группы фильтров, каждая своим столбиком. Переносятся целиком:
+                     при узком окне вторая уходит под первую, а не рассыпается по полям. -->
                 <WrapPanel Grid.Row="1"
-                           Margin="0,8,0,0">
-                    <TextBlock Margin="0,6,8,0"
-                               VerticalAlignment="Center"
-                               Style="{DynamicResource Text.CaptionStyle}"
-                               Text="Фильтр" />
+                           Margin="0,4,0,0">
+                    <Grid Margin="0,0,28,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="92" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <TextBox Width="280"
-                             Margin="0,0,12,8"
-                             Style="{DynamicResource TextBoxInputStyle}"
-                             Text="{Binding FilterArguments, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="{StaticResource LogcatFilterToolTip}" />
+                        <TextBlock Margin="0,0,8,6"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Уровень" />
+                        <ComboBox Grid.Column="1"
+                                  Width="150"
+                                  Margin="0,0,0,6"
+                                  HorizontalAlignment="Left"
+                                  VerticalAlignment="Center"
+                                  Style="{DynamicResource CompactComboBoxInputStyle}"
+                                  ItemsSource="{Binding Levels}"
+                                  SelectedItem="{Binding SelectedLevel, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayText"
+                                  ToolTip="{StaticResource LogcatLevelToolTip}" />
 
-                    <TextBlock Margin="0,6,8,0"
-                               VerticalAlignment="Center"
-                               Style="{DynamicResource Text.CaptionStyle}"
-                               Text="Поиск" />
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,0,8,6"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Теги" />
+                        <controls:TagInput Grid.Row="1"
+                                           Grid.Column="1"
+                                           Width="180"
+                                           Margin="0,0,0,6"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Items="{Binding FilterTags}"
+                                           Placeholder="тег + Enter"
+                                           ToolTip="{StaticResource LogcatTagsToolTip}" />
 
-                    <TextBox Width="240"
-                             Margin="0,0,0,8"
-                             Style="{DynamicResource TextBoxInputStyle}"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Поиск по уже показанным строкам" />
+                        <TextBlock Grid.Row="2"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Дополнительно" />
+                        <StackPanel Grid.Row="2"
+                                    Grid.Column="1"
+                                    Orientation="Horizontal">
+                            <TextBox Width="112"
+                                     VerticalAlignment="Center"
+                                     Style="{DynamicResource TextBoxInputStyle}"
+                                     Text="{Binding ExtraArguments, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="{StaticResource LogcatExtraToolTip}" />
+                            <CheckBox Margin="12,0,0,0"
+                                      VerticalAlignment="Center"
+                                      Content="Только Netarium"
+                                      IsChecked="{Binding OnlyNetarium, Mode=TwoWay}"
+                                      ToolTip="{StaticResource LogcatOnlyAppToolTip}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="92" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Margin="0,0,8,6"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Показывать" />
+                        <controls:TagInput Grid.Column="1"
+                                           Width="200"
+                                           Margin="0,0,0,6"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Items="{Binding IncludeTerms}"
+                                           Placeholder="условие + Enter"
+                                           ToolTip="Строка проходит, если содержит хотя бы одно условие. Пусто — проходят все." />
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Скрывать" />
+                        <controls:TagInput Grid.Row="1"
+                                           Grid.Column="1"
+                                           Width="200"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Items="{Binding ExcludeTerms}"
+                                           Placeholder="условие + Enter"
+                                           ToolTip="Строка прячется, если содержит хотя бы одно условие. Сильнее, чем «Показывать»." />
+                    </Grid>
                 </WrapPanel>
             </Grid>
         </Border>
@@ -138,20 +286,41 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <TextBox x:Name="LogOutputTextBox"
-                         Text="{Binding VisibleText, Mode=OneWay}"
-                         TextChanged="OnLogOutputTextChanged">
-                    <TextBox.Style>
-                        <Style TargetType="TextBox" BasedOn="{StaticResource ConsoleTextBoxStyle}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasVisibleLines}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBox.Style>
-                </TextBox>
+                <ListBox x:Name="LogOutputList"
+                         ItemsSource="{Binding VisibleLines}"
+                         SelectionMode="Extended"
+                         behaviors:ListSelectionBehavior.IsMarqueeEnabled="False"
+                         behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedLines}"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Style="{DynamicResource ConsoleListBoxStyle}"
+                         ItemContainerStyle="{DynamicResource ConsoleLineItemStyle}">
+                    <ListBox.InputBindings>
+                        <KeyBinding Key="C"
+                                    Modifiers="Control"
+                                    Command="{Binding CopySelectedCommand}" />
+                    </ListBox.InputBindings>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Text}"
+                                       TextWrapping="NoWrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.TextPrimary}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.DangerPrimary}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
         </Border>
     </Grid>

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Core.Devices;
@@ -10,20 +11,24 @@ public sealed class DevicesToolViewModel : ObservableObject
 {
     private readonly DeviceInventoryState _deviceInventory;
     private readonly IDeviceActionService _deviceActionService;
+    private readonly IDeviceScreenshotService _deviceScreenshotService;
     private readonly DeviceAliasCatalog _deviceAliases;
     private readonly NetariumServerEndpointCatalog _netariumServerEndpoint;
     private bool _isRefreshingSelection;
+    private ServerEndpointOptionViewModel? _selectedServer;
     private string _serverEndpoint;
     private string _statusText = "Готово";
 
     public DevicesToolViewModel(
         DeviceInventoryState deviceInventory,
         IDeviceActionService deviceActionService,
+        IDeviceScreenshotService deviceScreenshotService,
         DeviceAliasCatalog deviceAliases,
         NetariumServerEndpointCatalog netariumServerEndpoint)
     {
         _deviceInventory = deviceInventory;
         _deviceActionService = deviceActionService;
+        _deviceScreenshotService = deviceScreenshotService;
         _deviceAliases = deviceAliases;
         _netariumServerEndpoint = netariumServerEndpoint;
         _serverEndpoint = netariumServerEndpoint.Endpoint;
@@ -31,7 +36,11 @@ public sealed class DevicesToolViewModel : ObservableObject
         PowerCommand = new RelayCommand(() => _ = TogglePowerAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
         RebootCommand = new RelayCommand(() => _ = RebootAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
         StopCommand = new RelayCommand(() => _ = ForceStopAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
+        ClearCacheCommand = new RelayCommand(() => _ = ClearCacheAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
+        ScreenshotCommand = new RelayCommand(() => _ = ScreenshotAsync(), () => _deviceInventory.SelectedDevices.Count > 0);
         ApplyServerCommand = new RelayCommand(() => _ = ApplyServerAsync(), CanApplyServer);
+        AddServerCommand = new RelayCommand(() => _ = AddServerAsync(), CanAddServer);
+        RemoveServerCommand = new RelayCommand(() => _ = RemoveServerAsync(), CanRemoveServer);
         BeginEditAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(BeginEditAlias);
         SaveAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(row => _ = SaveAliasAsync(row));
         CancelAliasCommand = new RelayCommand<KnownDeviceRowViewModel>(CancelAliasEdit);
@@ -42,6 +51,7 @@ public sealed class DevicesToolViewModel : ObservableObject
         _deviceAliases.Changed += OnAliasesChanged;
         _netariumServerEndpoint.Changed += OnNetariumServerEndpointChanged;
 
+        RefreshServers();
         RefreshKnownDevices();
     }
 
@@ -55,7 +65,33 @@ public sealed class DevicesToolViewModel : ObservableObject
 
     public RelayCommand StopCommand { get; }
 
+    public RelayCommand ClearCacheCommand { get; }
+
+    public RelayCommand ScreenshotCommand { get; }
+
     public RelayCommand ApplyServerCommand { get; }
+
+    public RelayCommand AddServerCommand { get; }
+
+    public RelayCommand RemoveServerCommand { get; }
+
+    public ObservableCollection<ServerEndpointOptionViewModel> Servers { get; } = [];
+
+    /// <summary>
+    /// Выбор в списке подставляется в поле адреса. Обратной связи нет намеренно:
+    /// в поле можно набрать адрес, которого в списке ещё нет.
+    /// </summary>
+    public ServerEndpointOptionViewModel? SelectedServer
+    {
+        get => _selectedServer;
+        set
+        {
+            if (SetProperty(ref _selectedServer, value) && value is not null)
+            {
+                ServerEndpoint = value.Endpoint;
+            }
+        }
+    }
 
     public RelayCommand<KnownDeviceRowViewModel> BeginEditAliasCommand { get; }
 
@@ -81,6 +117,8 @@ public sealed class DevicesToolViewModel : ObservableObject
             }
 
             ApplyServerCommand.NotifyCanExecuteChanged();
+            AddServerCommand.NotifyCanExecuteChanged();
+            RemoveServerCommand.NotifyCanExecuteChanged();
             _ = PersistServerEndpointAsync(normalizedValue);
         }
     }
@@ -124,6 +162,132 @@ public sealed class DevicesToolViewModel : ObservableObject
         StatusText = FormatResult("Стоп", result);
     }
 
+    private async Task ScreenshotAsync()
+    {
+        StatusText = "Снимок экрана...";
+
+        var result = await _deviceScreenshotService.CaptureAsync(_deviceInventory.SelectedDevices.ToArray());
+
+        StatusText = result.FailureCount == 0
+            ? $"Снимков: {result.SuccessCount}"
+            : $"Снимков: {result.SuccessCount}, ошибок: {result.FailureCount}";
+
+        OpenFiles(result.FilePaths);
+    }
+
+    private void OpenFiles(IReadOnlyList<string> filePaths)
+    {
+        foreach (var filePath in filePaths)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                // Снимок уже сохранён — сообщаем, но результат не теряем.
+                StatusText = $"Файл сохранён, но не открылся: {ex.Message}";
+            }
+        }
+    }
+
+    private async Task AddServerAsync()
+    {
+        try
+        {
+            await _netariumServerEndpoint.AddEndpointAsync(ServerEndpoint);
+            StatusText = $"Сервер добавлен: {ServerEndpoint}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+    }
+
+    private async Task RemoveServerAsync()
+    {
+        var removedEndpoint = ServerEndpoint;
+
+        try
+        {
+            await _netariumServerEndpoint.RemoveEndpointAsync(removedEndpoint);
+            StatusText = $"Сервер убран из списка: {removedEndpoint}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Ошибка: {ex.Message}";
+        }
+    }
+
+    private bool CanAddServer()
+    {
+        return !string.IsNullOrWhiteSpace(ServerEndpoint) &&
+               !_netariumServerEndpoint.GetEndpoints().Contains(ServerEndpoint, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool CanRemoveServer()
+    {
+        return !string.IsNullOrWhiteSpace(ServerEndpoint) &&
+               _netariumServerEndpoint.GetEndpoints().Contains(ServerEndpoint, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void RefreshServers()
+    {
+        Servers.Clear();
+        foreach (var endpoint in _netariumServerEndpoint.GetEndpoints())
+        {
+            Servers.Add(new ServerEndpointOptionViewModel(endpoint, endpoint));
+        }
+
+        // Выделение выставляем без обратной записи: иначе обновление списка
+        // затирало бы адрес, набранный в поле руками.
+        _selectedServer = Servers.FirstOrDefault(option =>
+            string.Equals(option.Endpoint, ServerEndpoint, StringComparison.OrdinalIgnoreCase));
+
+        OnPropertyChanged(nameof(SelectedServer));
+        AddServerCommand.NotifyCanExecuteChanged();
+        RemoveServerCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task ClearCacheAsync()
+    {
+        StatusText = "Очистка кэша...";
+
+        var result = await _deviceActionService.ClearNetariumCacheAsync(_deviceInventory.SelectedDevices.ToArray());
+
+        var summary = $"Кэш очищен: {result.SuccessCount}, освобождено {FormatSize(result.FreedBytes)}";
+
+        if (result.FailureCount > 0)
+        {
+            summary += $", ошибок: {result.FailureCount}";
+        }
+
+        // Про незапустившееся приложение молчать нельзя: телевизор останется с пустым экраном.
+        if (result.RelaunchedCount < result.SuccessCount)
+        {
+            summary += $", не запустилось: {result.SuccessCount - result.RelaunchedCount}";
+        }
+
+        StatusText = summary;
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / (1024d * 1024 * 1024):0.#} ГБ";
+        }
+
+        if (bytes >= 1024 * 1024)
+        {
+            return $"{bytes / (1024d * 1024):0.#} МБ";
+        }
+
+        return bytes >= 1024
+            ? $"{bytes / 1024d:0.#} КБ"
+            : $"{bytes} Б";
+    }
+
     private async Task ApplyServerAsync()
     {
         if (!CanApplyServer())
@@ -147,9 +311,21 @@ public sealed class DevicesToolViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectionSummary));
         OnPropertyChanged(nameof(EmptyStateMessage));
+        NotifySelectionCommandsChanged();
+    }
+
+    /// <summary>
+    /// Все команды, зависящие от выделения, — одним списком. RelayCommand не слушает
+    /// CommandManager и пересчитывает CanExecute только по явному уведомлению, поэтому
+    /// забытая здесь команда навсегда застревает в состоянии на момент привязки.
+    /// </summary>
+    private void NotifySelectionCommandsChanged()
+    {
         PowerCommand.NotifyCanExecuteChanged();
         RebootCommand.NotifyCanExecuteChanged();
         StopCommand.NotifyCanExecuteChanged();
+        ClearCacheCommand.NotifyCanExecuteChanged();
+        ScreenshotCommand.NotifyCanExecuteChanged();
         ApplyServerCommand.NotifyCanExecuteChanged();
     }
 
@@ -234,14 +410,14 @@ public sealed class DevicesToolViewModel : ObservableObject
     private void OnNetariumServerEndpointChanged(object? sender, EventArgs e)
     {
         var endpoint = _netariumServerEndpoint.Endpoint;
-        if (string.Equals(ServerEndpoint, endpoint, StringComparison.Ordinal))
+        if (!string.Equals(ServerEndpoint, endpoint, StringComparison.Ordinal))
         {
-            return;
+            _serverEndpoint = endpoint;
+            OnPropertyChanged(nameof(ServerEndpoint));
+            ApplyServerCommand.NotifyCanExecuteChanged();
         }
 
-        _serverEndpoint = endpoint;
-        OnPropertyChanged(nameof(ServerEndpoint));
-        ApplyServerCommand.NotifyCanExecuteChanged();
+        RefreshServers();
     }
 
     private void BeginEditAlias(KnownDeviceRowViewModel? row)
@@ -339,6 +515,15 @@ public sealed class DevicesToolViewModel : ObservableObject
             // Keep editing responsive even if settings persistence fails.
         }
     }
+}
+
+/// <summary>
+/// Элемент выпадающего списка серверов. <see cref="DisplayText"/> — общая для приложения
+/// конвенция отображения в <c>ComboBoxInputStyle</c>.
+/// </summary>
+public sealed record ServerEndpointOptionViewModel(string Endpoint, string DisplayText)
+{
+    public override string ToString() => DisplayText;
 }
 
 public sealed class KnownDeviceRowViewModel : ObservableObject
