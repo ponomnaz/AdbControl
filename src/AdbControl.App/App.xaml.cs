@@ -73,7 +73,7 @@ public partial class App : System.Windows.Application
         var logcatSettings = new LogcatSettingsCatalog(new LogcatSettingsFileStore(storage.Paths));
         await logcatSettings.InitializeAsync();
         IAdbConsoleService adbConsole = new AdbConsoleService(adbProcessRunner);
-        var deviceTop = new AdbTopService(adbProcessRunner);
+        var deviceTop = new AdbTopService(adbProcessRunner, commandTraceJournal);
         IRemoteControlService remoteControl = new AdbRemoteControlService(adbProcessRunner, commandTraceJournal);
 
         IToolModule[] modules =

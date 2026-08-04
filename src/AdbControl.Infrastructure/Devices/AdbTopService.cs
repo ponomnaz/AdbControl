@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AdbControl.Application.Diagnostics;
 using AdbControl.Application.Top;
 using AdbControl.Core.Devices;
 
@@ -21,10 +22,19 @@ public sealed class AdbTopService : IDeviceTopService
     ];
 
     private readonly AdbProcessRunner _adbProcessRunner;
+    private readonly CommandTraceJournal _commandTraceJournal;
 
-    public AdbTopService(AdbProcessRunner adbProcessRunner)
+    /// <summary>
+    /// Вариант команды, сработавший на устройстве. Без этого перебор начинался бы
+    /// с начала при каждом снимке: на прошивке, где годится четвёртый вариант,
+    /// опрос стоил бы вчетверо дороже.
+    /// </summary>
+    private readonly Dictionary<string, string> _workingVariants = new(StringComparer.OrdinalIgnoreCase);
+
+    public AdbTopService(AdbProcessRunner adbProcessRunner, CommandTraceJournal commandTraceJournal)
     {
         _adbProcessRunner = adbProcessRunner;
+        _commandTraceJournal = commandTraceJournal;
     }
 
     public async Task<DeviceTopSnapshotResult> CaptureAsync(TvDeviceProfile device, CancellationToken cancellationToken = default)
@@ -37,7 +47,7 @@ public sealed class AdbTopService : IDeviceTopService
 
         string? lastErrorMessage = null;
 
-        foreach (var variant in TopCommandVariants)
+        foreach (var variant in GetVariantOrder(targetId))
         {
             var result = await _adbProcessRunner.RunAsync(
                 $"-s {targetId} {variant}",
@@ -57,13 +67,65 @@ public sealed class AdbTopService : IDeviceTopService
 
             if (LooksLikeTopOutput(cleanStdout) || LooksLikeTopOutput(combinedOutput))
             {
+                var wasRemembered = _workingVariants.TryGetValue(targetId, out var remembered) &&
+                                    string.Equals(remembered, variant, StringComparison.Ordinal);
+
+                _workingVariants[targetId] = variant;
+
+                // В журнал пишем только смену рабочего варианта: опрос идёт раз в пару
+                // секунд, и запись каждого снимка утопила бы остальные команды.
+                if (!wasRemembered)
+                {
+                    await RecordAsync($"-s {targetId} {variant}", "Вариант команды top подобран.", false, cancellationToken);
+                }
+
                 return DeviceTopSnapshotResult.Success(ParseSnapshot(string.IsNullOrWhiteSpace(cleanStdout) ? combinedOutput : cleanStdout));
             }
 
             lastErrorMessage = ExtractErrorMessage(stdout, stderr, result.ExitCode);
         }
 
+        _workingVariants.Remove(targetId);
+        await RecordAsync($"-s {targetId} top", lastErrorMessage ?? "Не удалось получить top.", true, cancellationToken);
+
         return DeviceTopSnapshotResult.Failure(lastErrorMessage ?? "Не удалось получить top.");
+    }
+
+    private IEnumerable<string> GetVariantOrder(string targetId)
+    {
+        if (_workingVariants.TryGetValue(targetId, out var remembered))
+        {
+            yield return remembered;
+        }
+
+        foreach (var variant in TopCommandVariants)
+        {
+            if (!string.Equals(variant, remembered, StringComparison.Ordinal))
+            {
+                yield return variant;
+            }
+        }
+    }
+
+    private async Task RecordAsync(string arguments, string message, bool isError, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _commandTraceJournal.RecordAsync(
+                new CommandTraceEntry(
+                    Guid.NewGuid(),
+                    DateTimeOffset.Now,
+                    $"adb {arguments}",
+                    isError ? string.Empty : message,
+                    isError ? message : string.Empty,
+                    isError ? 1 : 0,
+                    isError),
+                cancellationToken);
+        }
+        catch
+        {
+            // Журнал не должен мешать снятию top.
+        }
     }
 
     private static DeviceTopSnapshot ParseSnapshot(string output)
@@ -84,15 +146,45 @@ public sealed class AdbTopService : IDeviceTopService
             ? []
             : lines.Skip(headerIndex).ToArray();
 
-        var processes = tableLines.Length == 0
+        var columns = tableLines.Length == 0
             ? []
-            : ParseProcesses(tableLines);
+            : ExpandHeaderTokens(SplitTokens(tableLines[0]));
+
+        var processes = columns.Count == 0
+            ? []
+            : ParseProcesses(columns, tableLines.Skip(1));
 
         return new DeviceTopSnapshot(
             DateTimeOffset.Now,
             string.Join(Environment.NewLine, formattedSummaryLines),
-            BuildFormattedOutput(formattedSummaryLines, tableLines),
+            BuildFormattedOutput(formattedSummaryLines, columns, processes),
+            columns,
             processes);
+    }
+
+    /// <summary>
+    /// toybox печатает состояние и загрузку одним заголовком <c>S[%CPU]</c>, хотя данных
+    /// под ним две колонки. Без раскрытия заголовок короче строк на единицу, и всё,
+    /// что правее, съезжает: %CPU читается как %MEM, %MEM как TIME+, а время липнет к имени.
+    /// </summary>
+    private static IReadOnlyList<string> ExpandHeaderTokens(IReadOnlyList<string> tokens)
+    {
+        var columns = new List<string>(tokens.Count + 1);
+
+        foreach (var token in tokens)
+        {
+            var openIndex = token.IndexOf('[');
+            if (openIndex > 0 && token.EndsWith(']'))
+            {
+                columns.Add(token[..openIndex]);
+                columns.Add(token[(openIndex + 1)..^1]);
+                continue;
+            }
+
+            columns.Add(token);
+        }
+
+        return columns;
     }
 
     private static int FindHeaderIndex(IReadOnlyList<string> lines)
@@ -117,73 +209,61 @@ public sealed class AdbTopService : IDeviceTopService
         return -1;
     }
 
-    private static IReadOnlyList<TopProcessEntry> ParseProcesses(IReadOnlyList<string> lines)
+    private static IReadOnlyList<TopProcessEntry> ParseProcesses(
+        IReadOnlyList<string> columns,
+        IEnumerable<string> lines)
     {
-        if (lines.Count == 0)
-        {
-            return [];
-        }
-
-        var headerTokens = SplitTokens(lines[0]);
-        if (headerTokens.Length == 0)
-        {
-            return [];
-        }
-
-        var pidIndex = FindColumnIndex(headerTokens, "PID");
-        var cpuIndex = FindColumnIndex(headerTokens, "%CPU", "CPU%", "CPU");
-        var resIndex = FindColumnIndex(headerTokens, "RES", "RSS");
-        var stateIndex = FindColumnIndex(headerTokens, "S", "STATE");
-        var nameIndex = FindColumnIndex(headerTokens, "COMMAND", "CMD", "ARGS", "NAME");
-
+        var pidIndex = FindColumnIndex(columns, "PID");
         if (pidIndex < 0)
         {
             return [];
         }
 
-        if (nameIndex < 0)
-        {
-            nameIndex = headerTokens.Length - 1;
-        }
-
         var rows = new List<TopProcessEntry>();
 
-        for (var index = 1; index < lines.Count; index++)
+        foreach (var rawLine in lines)
         {
-            var line = lines[index].Trim();
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            if (line.StartsWith("Tasks:", StringComparison.OrdinalIgnoreCase) ||
+            var line = rawLine.Trim();
+            if (line.Length == 0 ||
+                line.StartsWith("Tasks:", StringComparison.OrdinalIgnoreCase) ||
                 line.StartsWith("Mem:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Swap:", StringComparison.OrdinalIgnoreCase) ||
                 line.StartsWith("CPU:", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
             var tokens = SplitTokens(line);
-            if (tokens.Length <= Math.Max(pidIndex, nameIndex))
-            {
-                continue;
-            }
-
             var pid = SafeGet(tokens, pidIndex);
             if (string.IsNullOrWhiteSpace(pid) || !char.IsDigit(pid[0]))
             {
                 continue;
             }
 
-            rows.Add(new TopProcessEntry(
-                pid,
-                SafeGet(tokens, cpuIndex),
-                SafeGet(tokens, resIndex),
-                SafeGet(tokens, stateIndex),
-                string.Join(" ", tokens.Skip(nameIndex))));
+            rows.Add(new TopProcessEntry(AlignToColumns(tokens, columns.Count)));
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Последняя колонка — имя процесса с аргументами, в ней бывают пробелы,
+    /// поэтому хвост лишних токенов склеивается обратно.
+    /// </summary>
+    private static string[] AlignToColumns(IReadOnlyList<string> tokens, int columnCount)
+    {
+        var values = new string[columnCount];
+
+        for (var index = 0; index < columnCount - 1; index++)
+        {
+            values[index] = SafeGet(tokens, index);
+        }
+
+        values[columnCount - 1] = tokens.Count >= columnCount
+            ? string.Join(" ", tokens.Skip(columnCount - 1))
+            : SafeGet(tokens, columnCount - 1);
+
+        return values;
     }
 
     private static int FindColumnIndex(IReadOnlyList<string> headers, params string[] names)
@@ -283,14 +363,26 @@ public sealed class AdbTopService : IDeviceTopService
         return $"top завершился с кодом {exitCode}.";
     }
 
-    private static string BuildFormattedOutput(IReadOnlyList<string> summaryLines, IReadOnlyList<string> tableLines)
+    private static string BuildFormattedOutput(
+        IReadOnlyList<string> summaryLines,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<TopProcessEntry> processes)
     {
-        if (tableLines.Count == 0)
+        if (columns.Count == 0)
         {
             return string.Join(Environment.NewLine, summaryLines);
         }
 
-        var parts = new List<string>(summaryLines.Count + tableLines.Count + 1);
+        var rows = new List<IReadOnlyList<string>>(processes.Count + 1) { columns };
+        rows.AddRange(processes.Select(process => process.Values));
+
+        var widths = new int[columns.Count];
+        for (var columnIndex = 0; columnIndex < columns.Count - 1; columnIndex++)
+        {
+            widths[columnIndex] = rows.Max(row => SafeGet(row, columnIndex).Length);
+        }
+
+        var parts = new List<string>(summaryLines.Count + rows.Count + 1);
         parts.AddRange(summaryLines);
 
         if (summaryLines.Count > 0)
@@ -298,7 +390,7 @@ public sealed class AdbTopService : IDeviceTopService
             parts.Add(string.Empty);
         }
 
-        parts.AddRange(FormatTableLines(tableLines));
+        parts.AddRange(rows.Select(row => FormatRow(row, widths)));
         return string.Join(Environment.NewLine, parts);
     }
 
@@ -341,77 +433,6 @@ public sealed class AdbTopService : IDeviceTopService
         }
 
         return formatted;
-    }
-
-    private static IReadOnlyList<string> FormatTableLines(IReadOnlyList<string> tableLines)
-    {
-        if (tableLines.Count == 0)
-        {
-            return [];
-        }
-
-        var headerTokens = NormalizeTableTokens(tableLines[0]);
-        if (headerTokens.Length == 0)
-        {
-            return tableLines;
-        }
-
-        var rows = new List<string[]>(tableLines.Count) { headerTokens };
-
-        foreach (var line in tableLines.Skip(1))
-        {
-            var tokens = NormalizeTableTokens(line);
-            if (tokens.Length == 0)
-            {
-                continue;
-            }
-
-            rows.Add(StretchTokens(tokens, headerTokens.Length));
-        }
-
-        if (rows.Count == 1)
-        {
-            return [string.Join("  ", headerTokens)];
-        }
-
-        var widths = new int[headerTokens.Length];
-        for (var columnIndex = 0; columnIndex < headerTokens.Length - 1; columnIndex++)
-        {
-            widths[columnIndex] = rows.Max(row => SafeGet(row, columnIndex).Length);
-        }
-
-        return rows
-            .Select(row => FormatRow(row, widths))
-            .ToArray();
-    }
-
-    private static string[] NormalizeTableTokens(string line)
-    {
-        return SplitTokens(line)
-            .Select(static token => token.Replace("S[%CPU]", "S").Replace("[%CPU]", "%CPU"))
-            .ToArray();
-    }
-
-    private static string[] StretchTokens(string[] tokens, int targetColumnCount)
-    {
-        if (tokens.Length == targetColumnCount)
-        {
-            return tokens;
-        }
-
-        if (tokens.Length < targetColumnCount)
-        {
-            return [.. tokens, .. Enumerable.Repeat(string.Empty, targetColumnCount - tokens.Length)];
-        }
-
-        var result = new string[targetColumnCount];
-        for (var index = 0; index < targetColumnCount - 1; index++)
-        {
-            result[index] = index < tokens.Length ? tokens[index] : string.Empty;
-        }
-
-        result[targetColumnCount - 1] = string.Join(" ", tokens.Skip(targetColumnCount - 1));
-        return result;
     }
 
     private static string FormatRow(IReadOnlyList<string> columns, IReadOnlyList<int> widths)

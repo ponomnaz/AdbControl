@@ -9,7 +9,8 @@ namespace AdbControl.Tools.Top.ViewModels;
 
 public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(2);
+    private const string NetariumPackageName = "cs.netarium";
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(3);
 
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
@@ -17,7 +18,6 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
     private TopDeviceOptionViewModel? _selectedDevice;
     private string _statusText;
     private string _summaryText = string.Empty;
-    private string _rawOutput = string.Empty;
     private string _snapshotTimeText = "Снимков нет";
     private bool _isRefreshing;
     private bool _isRunning;
@@ -55,6 +55,10 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
     public ObservableCollection<TopDeviceOptionViewModel> ConnectedDevices { get; } = [];
 
     public ObservableCollection<TopProcessRowViewModel> Processes { get; } = [];
+
+    public IReadOnlyList<string> Columns { get; private set; } = [];
+
+    public bool HasProcesses => Processes.Count > 0;
 
     public RelayCommand RefreshCommand { get; }
 
@@ -103,20 +107,6 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string RawOutput
-    {
-        get => _rawOutput;
-        private set
-        {
-            if (!SetProperty(ref _rawOutput, value))
-            {
-                return;
-            }
-
-            OnPropertyChanged(nameof(HasRawOutput));
-        }
-    }
-
     public string SnapshotTimeText
     {
         get => _snapshotTimeText;
@@ -124,8 +114,6 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
     }
 
     public bool HasSummary => !string.IsNullOrWhiteSpace(SummaryText);
-
-    public bool HasRawOutput => !string.IsNullOrWhiteSpace(RawOutput);
 
     public string DeviceSummary => ConnectedDevices.Count == 0
         ? "Нет подключенных устройств"
@@ -260,29 +248,58 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Строки обновляются на месте, а не через Clear и Add: полная замена коллекции
+    /// сбрасывает прокрутку списка в начало на каждом снимке. top отдаёт процессы
+    /// по убыванию нагрузки, поэтому строка — это позиция в рейтинге, а не процесс.
+    /// </summary>
     private void ApplySnapshot(DeviceTopSnapshot snapshot)
     {
         SummaryText = snapshot.SummaryText;
-        RawOutput = snapshot.RawOutput;
-        SnapshotTimeText = $"Обновлено: {snapshot.CapturedAt:dd.MM.yyyy HH:mm:ss}";
+        SnapshotTimeText = $"Обновлено: {snapshot.CapturedAt:HH:mm:ss}";
 
-        Processes.Clear();
-        foreach (var process in snapshot.Processes)
+        if (!Columns.SequenceEqual(snapshot.Columns, StringComparer.Ordinal))
         {
-            Processes.Add(new TopProcessRowViewModel(process.Pid, process.Cpu, process.Res, process.State, process.Name));
+            Columns = snapshot.Columns;
+            OnPropertyChanged(nameof(Columns));
+        }
+
+        var nameIndex = snapshot.IndexOf("ARGS", "COMMAND", "CMD", "NAME");
+
+        for (var index = 0; index < snapshot.Processes.Count; index++)
+        {
+            var values = snapshot.Processes[index].Values;
+            var isNetarium = nameIndex >= 0 &&
+                             snapshot.Processes[index].Get(nameIndex).Contains(NetariumPackageName, StringComparison.OrdinalIgnoreCase);
+
+            if (index < Processes.Count)
+            {
+                Processes[index].Update(values, isNetarium);
+            }
+            else
+            {
+                Processes.Add(new TopProcessRowViewModel(values, isNetarium));
+            }
+        }
+
+        while (Processes.Count > snapshot.Processes.Count)
+        {
+            Processes.RemoveAt(Processes.Count - 1);
         }
 
         OnPropertyChanged(nameof(ProcessSummary));
+
+        OnPropertyChanged(nameof(HasProcesses));
         OnPropertyChanged(nameof(EmptyStateMessage));
     }
 
     private void ClearSnapshot()
     {
         SummaryText = string.Empty;
-        RawOutput = string.Empty;
         SnapshotTimeText = "Снимков нет";
         Processes.Clear();
         OnPropertyChanged(nameof(ProcessSummary));
+        OnPropertyChanged(nameof(HasProcesses));
         OnPropertyChanged(nameof(EmptyStateMessage));
     }
 
@@ -381,4 +398,32 @@ public sealed record TopDeviceOptionViewModel(TvDeviceProfile Device, string Tar
     public override string ToString() => DisplayText;
 }
 
-public sealed record TopProcessRowViewModel(string Pid, string Cpu, string Res, string State, string Name);
+public sealed class TopProcessRowViewModel : ObservableObject
+{
+    private IReadOnlyList<string> _values;
+    private bool _isNetarium;
+
+    public TopProcessRowViewModel(IReadOnlyList<string> values, bool isNetarium)
+    {
+        _values = values;
+        _isNetarium = isNetarium;
+    }
+
+    public IReadOnlyList<string> Values
+    {
+        get => _values;
+        private set => SetProperty(ref _values, value);
+    }
+
+    public bool IsNetarium
+    {
+        get => _isNetarium;
+        private set => SetProperty(ref _isNetarium, value);
+    }
+
+    public void Update(IReadOnlyList<string> values, bool isNetarium)
+    {
+        Values = values;
+        IsNetarium = isNetarium;
+    }
+}

@@ -7,29 +7,93 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
-        <Style x:Key="VisibleWhenRawOutputMissingStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
+        <Style x:Key="SummaryTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasSummary}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="VisibleWhenNoProcessesStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
             <Setter Property="Visibility" Value="Visible" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding HasRawOutput}" Value="True">
+                <DataTrigger Binding="{Binding HasProcesses}" Value="True">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+        <Style x:Key="ProcessListStyle" TargetType="ListView">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="IsTabStop" Value="False" />
-        </Style>
-
-        <Style x:Key="VisibleWhenRawOutputExistsStyle" TargetType="TextBox" BasedOn="{StaticResource ConsoleTextBoxStyle}">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding HasRawOutput}" Value="True">
+                <DataTrigger Binding="{Binding HasProcesses}" Value="True">
                     <Setter Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- Заголовки колонок: штатное оформление GridView выпадает из общего вида. -->
+        <Style x:Key="ProcessColumnHeaderStyle" TargetType="GridViewColumnHeader">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{DynamicResource Brush.BorderDefault}"
+                                BorderThickness="0,0,1,1">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ProcessRowStyle" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                SnapsToDevicePixels="True">
+                            <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                  Columns="{TemplateBinding GridView.ColumnCollection}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Процесс приложения подсвечен: ради него сюда и заходят. -->
+                            <DataTrigger Binding="{Binding IsNetarium}" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSelection}" />
+                            </DataTrigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentSoft}" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                    <Condition Property="IsSelected" Value="False" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}" />
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
@@ -87,17 +151,36 @@
                 Margin="0,6,0,0"
                 Style="{DynamicResource PanelSurfaceStyle}">
             <Grid>
-                <TextBlock Style="{StaticResource VisibleWhenRawOutputMissingStyle}"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Margin="0,0,0,6"
+                           FontFamily="Consolas"
+                           Style="{StaticResource SummaryTextStyle}"
+                           Text="{Binding SummaryText}" />
+
+                <TextBlock Grid.Row="1"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource VisibleWhenNoProcessesStyle}"
                            Text="{Binding EmptyStateMessage}" />
 
-                <TextBox AcceptsReturn="True"
-                         IsReadOnly="True"
-                         TextWrapping="NoWrap"
-                         VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"
-                         FontFamily="Consolas"
-                         Style="{StaticResource VisibleWhenRawOutputExistsStyle}"
-                         Text="{Binding RawOutput, Mode=OneWay}" />
+                <ListView x:Name="ProcessList"
+                          Grid.Row="1"
+                          ItemsSource="{Binding Processes}"
+                          Style="{StaticResource ProcessListStyle}"
+                          ItemContainerStyle="{StaticResource ProcessRowStyle}"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListView.View>
+                        <GridView x:Name="ProcessGrid"
+                                  ColumnHeaderContainerStyle="{StaticResource ProcessColumnHeaderStyle}" />
+                    </ListView.View>
+                </ListView>
             </Grid>
         </Border>
     </Grid>
