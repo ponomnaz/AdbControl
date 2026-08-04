@@ -104,47 +104,74 @@
         </Grid.RowDefinitions>
 
         <Border Style="{DynamicResource PanelSurfaceStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel>
-                    <TextBlock Style="{DynamicResource Text.PageTitleStyle}" Text="Top" />
-                    <StackPanel Margin="0,8,0,0"
-                                Orientation="Horizontal">
-                        <TextBlock Style="{DynamicResource Text.CaptionStyle}"
-                                   Text="{Binding ProcessSummary}" />
-                        <TextBlock Margin="12,0,0,0"
-                                   Style="{DynamicResource Text.CaptionStyle}"
-                                   Text="{Binding SnapshotTimeText}" />
+            <StackPanel>
+                <!-- Переносимая компоновка: в колонке Auto панель кнопок мерялась бы
+                     бесконечной шириной и выдавливала заголовок в ноль. -->
+                <WrapPanel>
+                    <StackPanel MinWidth="200"
+                                Margin="0,0,16,8">
+                        <TextBlock Style="{DynamicResource Text.PageTitleStyle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="Top" />
+                        <WrapPanel Margin="0,8,0,0">
+                            <TextBlock Margin="0,0,12,0"
+                                       Style="{DynamicResource Text.CaptionStyle}"
+                                       Text="{Binding ProcessSummary}" />
+                            <TextBlock Margin="0,0,12,0"
+                                       Style="{DynamicResource Text.CaptionStyle}"
+                                       Text="{Binding SnapshotTimeText}" />
+                            <TextBlock Style="{DynamicResource Text.BodyMutedStyle}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Text="{Binding StatusText}" />
+                        </WrapPanel>
                     </StackPanel>
-                </StackPanel>
 
-                <StackPanel Grid.Column="1"
-                            Margin="16,0,0,0"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Bottom">
-                    <ComboBox Width="240"
-                              Margin="0,0,8,0"
-                              Style="{DynamicResource CompactComboBoxInputStyle}"
-                              ItemsSource="{Binding ConnectedDevices}"
-                              SelectedItem="{Binding SelectedDevice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              DisplayMemberPath="DisplayText" />
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding RefreshCommand}"
-                            Content="Обновить"
-                            Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding StartCommand}"
-                            Content="Старт"
-                            Style="{DynamicResource PrimaryButtonStyle}" />
-                    <Button Command="{Binding StopCommand}"
-                            Content="Стоп"
-                            Style="{DynamicResource DangerButtonStyle}" />
-                </StackPanel>
-            </Grid>
+                    <WrapPanel VerticalAlignment="Bottom">
+                        <ComboBox Width="200"
+                                  Margin="0,0,8,8"
+                                  Style="{DynamicResource CompactComboBoxInputStyle}"
+                                  ItemsSource="{Binding ConnectedDevices}"
+                                  SelectedItem="{Binding SelectedDevice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  DisplayMemberPath="DisplayText" />
+                        <Button Margin="0,0,8,8"
+                                Command="{Binding RefreshCommand}"
+                                Content="Снимок"
+                                Style="{DynamicResource SecondaryButtonStyle}"
+                                ToolTip="Один замер прямо сейчас" />
+                        <Button Margin="0,0,8,8"
+                                Command="{Binding StartCommand}"
+                                Content="Следить"
+                                Style="{DynamicResource PrimaryButtonStyle}"
+                                ToolTip="Обновлять непрерывно с выбранным интервалом" />
+                        <Button Margin="0,0,0,8"
+                                Command="{Binding StopCommand}"
+                                Content="Стоп"
+                                Style="{DynamicResource DangerButtonStyle}" />
+                    </WrapPanel>
+                </WrapPanel>
+
+                <WrapPanel>
+                    <StackPanel Margin="0,0,20,0"
+                                Orientation="Horizontal">
+                        <TextBlock Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="Интервал" />
+                        <ComboBox Width="80"
+                                  VerticalAlignment="Center"
+                                  Style="{DynamicResource CompactComboBoxInputStyle}"
+                                  ItemsSource="{Binding Intervals}"
+                                  SelectedItem="{Binding SelectedInterval, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayText"
+                                  ToolTip="Как часто снимать top в режиме «Следить». Сам замер заметно грузит телевизор." />
+                    </StackPanel>
+
+                    <CheckBox VerticalAlignment="Center"
+                              Content="Все процессы"
+                              IsChecked="{Binding ShowAllProcesses, Mode=TwoWay}"
+                              ToolTip="По умолчанию берутся 30 самых нагруженных. Полный список — это три сотни строк и заметно дороже для устройства." />
+                </WrapPanel>
+            </StackPanel>
         </Border>
 
         <Border Grid.Row="1"
@@ -156,10 +183,33 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Margin="0,0,0,6"
-                           FontFamily="Consolas"
-                           Style="{StaticResource SummaryTextStyle}"
-                           Text="{Binding SummaryText}" />
+                <StackPanel Margin="0,0,0,6">
+                    <Border Padding="8,4"
+                            Margin="0,0,0,6"
+                            HorizontalAlignment="Left"
+                            Background="{DynamicResource Brush.AccentSelection}"
+                            BorderBrush="{DynamicResource Brush.AccentSoft}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Radius.Control}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasNetariumSummary}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextPrimary}"
+                                   Text="{Binding NetariumSummary}" />
+                    </Border>
+
+                    <TextBlock FontFamily="Consolas"
+                               Style="{StaticResource SummaryTextStyle}"
+                               Text="{Binding SummaryText}" />
+                </StackPanel>
 
                 <TextBlock Grid.Row="1"
                            HorizontalAlignment="Center"

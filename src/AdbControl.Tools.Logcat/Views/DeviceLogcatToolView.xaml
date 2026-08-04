@@ -289,7 +289,6 @@
                 <ListBox x:Name="LogOutputList"
                          ItemsSource="{Binding VisibleLines}"
                          SelectionMode="Extended"
-                         behaviors:ListSelectionBehavior.IsMarqueeEnabled="False"
                          behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedLines}"
                          VirtualizingPanel.IsVirtualizing="True"
                          VirtualizingPanel.VirtualizationMode="Recycling"

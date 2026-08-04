@@ -11,14 +11,16 @@ public sealed class AdbTopService : IDeviceTopService
     private static readonly Regex AnsiEscapeRegex = new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ControlCharacterRegex = new(@"[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex SummaryLabelRegex = new(@"^\s*(?<label>[^:]+:)(?<tail>.*)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly string[] TopCommandVariants =
+    /// <summary>
+    /// Шаблоны команд: <c>{0}</c> подставляет ограничение числа процессов либо пустую строку.
+    /// Прошивки отличаются набором поддерживаемых ключей, поэтому вариантов несколько.
+    /// </summary>
+    private static readonly string[] TopCommandTemplates =
     [
-        "shell top -b -n 1",
-        "shell top -m 30 -n 1",
-        "shell top -n 1 -m 30",
-        "shell top -n 1",
-        "shell \"top -n 1\"",
-        "shell toybox top -b -n 1"
+        "shell top -b -n 1{0}",
+        "shell top -n 1{0}",
+        "shell \"top -n 1{0}\"",
+        "shell toybox top -b -n 1{0}"
     ];
 
     private readonly AdbProcessRunner _adbProcessRunner;
@@ -37,7 +39,10 @@ public sealed class AdbTopService : IDeviceTopService
         _commandTraceJournal = commandTraceJournal;
     }
 
-    public async Task<DeviceTopSnapshotResult> CaptureAsync(TvDeviceProfile device, CancellationToken cancellationToken = default)
+    public async Task<DeviceTopSnapshotResult> CaptureAsync(
+        TvDeviceProfile device,
+        int? processLimit = null,
+        CancellationToken cancellationToken = default)
     {
         var targetId = GetTargetId(device);
         if (string.IsNullOrWhiteSpace(targetId))
@@ -45,10 +50,13 @@ public sealed class AdbTopService : IDeviceTopService
             return DeviceTopSnapshotResult.Failure("У устройства нет ADB-идентификатора.");
         }
 
+        var limitFragment = processLimit is > 0 ? $" -m {processLimit}" : string.Empty;
         string? lastErrorMessage = null;
 
-        foreach (var variant in GetVariantOrder(targetId))
+        foreach (var template in GetTemplateOrder(targetId))
         {
+            var variant = string.Format(template, limitFragment);
+
             var result = await _adbProcessRunner.RunAsync(
                 $"-s {targetId} {variant}",
                 cancellationToken,
@@ -67,10 +75,12 @@ public sealed class AdbTopService : IDeviceTopService
 
             if (LooksLikeTopOutput(cleanStdout) || LooksLikeTopOutput(combinedOutput))
             {
+                // Запоминаем шаблон, а не готовую строку: смена предела не должна
+                // сбрасывать подобранный вариант.
                 var wasRemembered = _workingVariants.TryGetValue(targetId, out var remembered) &&
-                                    string.Equals(remembered, variant, StringComparison.Ordinal);
+                                    string.Equals(remembered, template, StringComparison.Ordinal);
 
-                _workingVariants[targetId] = variant;
+                _workingVariants[targetId] = template;
 
                 // В журнал пишем только смену рабочего варианта: опрос идёт раз в пару
                 // секунд, и запись каждого снимка утопила бы остальные команды.
@@ -91,18 +101,20 @@ public sealed class AdbTopService : IDeviceTopService
         return DeviceTopSnapshotResult.Failure(lastErrorMessage ?? "Не удалось получить top.");
     }
 
-    private IEnumerable<string> GetVariantOrder(string targetId)
+    private IEnumerable<string> GetTemplateOrder(string targetId)
     {
-        if (_workingVariants.TryGetValue(targetId, out var remembered))
+        _workingVariants.TryGetValue(targetId, out var remembered);
+
+        if (remembered is not null)
         {
             yield return remembered;
         }
 
-        foreach (var variant in TopCommandVariants)
+        foreach (var template in TopCommandTemplates)
         {
-            if (!string.Equals(variant, remembered, StringComparison.Ordinal))
+            if (!string.Equals(template, remembered, StringComparison.Ordinal))
             {
-                yield return variant;
+                yield return template;
             }
         }
     }

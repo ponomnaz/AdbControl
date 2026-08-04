@@ -10,7 +10,9 @@ namespace AdbControl.Tools.Top.ViewModels;
 public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
 {
     private const string NetariumPackageName = "cs.netarium";
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(3);
+
+    /// <summary>Тридцати самых нагруженных хватает: полная выдача — три сотни строк.</summary>
+    private const int TopProcessLimit = 30;
 
     private readonly DeviceInventoryState _deviceInventory;
     private readonly DeviceAliasCatalog _deviceAliases;
@@ -19,6 +21,9 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
     private string _statusText;
     private string _summaryText = string.Empty;
     private string _snapshotTimeText = "Снимков нет";
+    private string _netariumSummary = string.Empty;
+    private TopIntervalOptionViewModel _selectedInterval = TopIntervalOptionViewModel.All[2];
+    private bool _showAllProcesses;
     private bool _isRefreshing;
     private bool _isRunning;
     private CancellationTokenSource? _pollingCts;
@@ -59,6 +64,42 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
     public IReadOnlyList<string> Columns { get; private set; } = [];
 
     public bool HasProcesses => Processes.Count > 0;
+
+    public IReadOnlyList<TopIntervalOptionViewModel> Intervals => TopIntervalOptionViewModel.All;
+
+    public TopIntervalOptionViewModel SelectedInterval
+    {
+        get => _selectedInterval;
+        set => SetProperty(ref _selectedInterval, value);
+    }
+
+    /// <summary>Полный список нужен редко, а стоит устройству заметно дороже.</summary>
+    public bool ShowAllProcesses
+    {
+        get => _showAllProcesses;
+        set
+        {
+            if (SetProperty(ref _showAllProcesses, value) && !_isRunning)
+            {
+                _ = RefreshAsync();
+            }
+        }
+    }
+
+    /// <summary>Ответ на главный вопрос вкладки, без поиска по списку.</summary>
+    public string NetariumSummary
+    {
+        get => _netariumSummary;
+        private set
+        {
+            if (SetProperty(ref _netariumSummary, value))
+            {
+                OnPropertyChanged(nameof(HasNetariumSummary));
+            }
+        }
+    }
+
+    public bool HasNetariumSummary => !string.IsNullOrWhiteSpace(NetariumSummary);
 
     public RelayCommand RefreshCommand { get; }
 
@@ -167,7 +208,7 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
                 }
 
                 await CaptureSnapshotAsync(currentSelection, cts.Token);
-                await Task.Delay(RefreshInterval, cts.Token);
+                await Task.Delay(SelectedInterval.Interval, cts.Token);
             }
         }
         catch (OperationCanceledException)
@@ -207,7 +248,10 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
             StatusText = _isRunning ? "Обновляется..." : "Загрузка...";
             NotifyCommandStateChanged();
 
-            var result = await _deviceTopService.CaptureAsync(deviceOption.Device, cancellationToken);
+            var result = await _deviceTopService.CaptureAsync(
+                deviceOption.Device,
+                ShowAllProcesses ? null : TopProcessLimit,
+                cancellationToken);
             if (cancellationToken.IsCancellationRequested || _isDisposed)
             {
                 return;
@@ -265,6 +309,7 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
         }
 
         var nameIndex = snapshot.IndexOf("ARGS", "COMMAND", "CMD", "NAME");
+        UpdateNetariumSummary(snapshot, nameIndex);
 
         for (var index = 0; index < snapshot.Processes.Count; index++)
         {
@@ -293,9 +338,41 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(EmptyStateMessage));
     }
 
+    /// <summary>
+    /// Ищется по имени процесса. При ограниченной выдаче приложение может не попасть
+    /// в тридцатку — тогда честно говорим об этом, а не выдаём молчание за «не запущен».
+    /// </summary>
+    private void UpdateNetariumSummary(DeviceTopSnapshot snapshot, int nameIndex)
+    {
+        if (nameIndex < 0)
+        {
+            NetariumSummary = string.Empty;
+            return;
+        }
+
+        var process = snapshot.Processes.FirstOrDefault(entry =>
+            entry.Get(nameIndex).Contains(NetariumPackageName, StringComparison.OrdinalIgnoreCase));
+
+        if (process is null)
+        {
+            NetariumSummary = ShowAllProcesses
+                ? "Netarium не запущен"
+                : $"Netarium не в первой {TopProcessLimit}: включи «Все процессы», чтобы увидеть";
+            return;
+        }
+
+        var cpu = process.Get(snapshot.IndexOf("%CPU"));
+        var mem = process.Get(snapshot.IndexOf("%MEM"));
+        var res = process.Get(snapshot.IndexOf("RES", "RSS"));
+        var pid = process.Get(snapshot.IndexOf("PID"));
+
+        NetariumSummary = $"Netarium — CPU {cpu}%, память {res} ({mem}%), PID {pid}";
+    }
+
     private void ClearSnapshot()
     {
         SummaryText = string.Empty;
+        NetariumSummary = string.Empty;
         SnapshotTimeText = "Снимков нет";
         Processes.Clear();
         OnPropertyChanged(nameof(ProcessSummary));
@@ -395,6 +472,20 @@ public sealed class DeviceTopToolViewModel : ObservableObject, IDisposable
 
 public sealed record TopDeviceOptionViewModel(TvDeviceProfile Device, string TargetId, string DisplayText)
 {
+    public override string ToString() => DisplayText;
+}
+
+public sealed record TopIntervalOptionViewModel(TimeSpan Interval, string DisplayText)
+{
+    public static IReadOnlyList<TopIntervalOptionViewModel> All { get; } =
+    [
+        new(TimeSpan.FromSeconds(1), "1 с"),
+        new(TimeSpan.FromSeconds(2), "2 с"),
+        new(TimeSpan.FromSeconds(3), "3 с"),
+        new(TimeSpan.FromSeconds(5), "5 с"),
+        new(TimeSpan.FromSeconds(10), "10 с")
+    ];
+
     public override string ToString() => DisplayText;
 }
 

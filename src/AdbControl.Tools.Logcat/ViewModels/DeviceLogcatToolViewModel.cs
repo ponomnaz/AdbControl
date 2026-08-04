@@ -746,7 +746,17 @@ public sealed record LogcatDeviceOptionViewModel(TvDeviceProfile Device, string 
     public override string ToString() => DisplayText;
 }
 
-public sealed record LogcatLineItemViewModel(string Text, bool IsError);
+/// <summary>
+/// Строка лога сравнивается по ссылке, а не по содержимому. Одинаковых строк в логе
+/// сколько угодно, а выделение в WPF ищет элемент равенством: с record выделение одной
+/// строки прилипало бы к первому её двойнику, и рамка работала бы вразнобой.
+/// </summary>
+public sealed class LogcatLineItemViewModel(string text, bool isError)
+{
+    public string Text { get; } = text;
+
+    public bool IsError { get; } = isError;
+}
 
 /// <summary>
 /// Уровень — порог: выбранный и всё, что важнее. Свойство <see cref="DisplayText"/> —

@@ -12,4 +12,19 @@
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Tabs.xaml" />
         <ResourceDictionary Source="/AdbControl.Shell;component/Styles/Icons.xaml" />
     </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Гасим стандартную рамку фокуса WPF. По умолчанию каждый фокусируемый элемент
+        рисует поверх себя пунктирный чёрный прямоугольник, причём в слое адорнеров:
+        он появляется по щелчку мышью и остаётся висеть, читаясь как мусор на экране.
+        Собственная индикация в теме уже есть: у полей и списков — акцентная рамка
+        по IsKeyboardFocused, у строк списка — акцентная заливка выделения.
+    -->
+    <Style x:Key="{x:Static SystemParameters.FocusVisualStyleKey}">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate />
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>
