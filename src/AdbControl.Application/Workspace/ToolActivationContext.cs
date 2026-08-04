@@ -1,6 +1,7 @@
 using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Files;
 using AdbControl.Application.Logcat;
 using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
@@ -25,6 +26,8 @@ public sealed record ToolActivationContext(
     IAdbConnectionService AdbConnection,
     IDeviceActionService DeviceActions,
     IDeviceScreenshotService DeviceScreenshots,
+    IScreenshotLibraryService ScreenshotLibrary,
+    IGallerySettingsStore GallerySettings,
     IDeviceLogcatService DeviceLogcat,
     LogcatSettingsCatalog LogcatSettings,
     IAdbConsoleService AdbConsole,

@@ -3,9 +3,11 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using AdbControl.Application.Common;
-using AdbControl.Application.Devices;
+using AdbControl.Application.Files;
 
 namespace AdbControl.Tools.Gallery.ViewModels;
 
@@ -13,11 +15,26 @@ namespace AdbControl.Tools.Gallery.ViewModels;
 /// Болванка вкладки: список и превью читают настоящую папку снимков, но ничего в ней
 /// не меняют. Действия, которые правят диск, пока только сообщают о себе в статусе.
 /// </summary>
-public sealed class ScreenshotGalleryToolViewModel : ObservableObject
+public sealed class ScreenshotGalleryToolViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".webp"];
 
+    /// <summary>
+    /// Снимок пишется на диск не одним событием: сначала «создан», потом несколько
+    /// «изменён» по мере роста файла. Ждём тишины, иначе список дёргается на каждое.
+    /// </summary>
+    private static readonly TimeSpan SyncDelay = TimeSpan.FromMilliseconds(400);
+
+    private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(800);
+
+    private readonly IScreenshotLibraryService _library;
+    private readonly IGallerySettingsStore _settingsStore;
     private readonly string _rootDirectory;
+    private readonly Dispatcher _dispatcher;
+    private readonly DispatcherTimer _syncTimer;
+    private readonly DispatcherTimer _saveTimer;
+    private FileSystemWatcher? _watcher;
+    private GridLength _listWidth = new(300);
     private string _currentDirectory;
     private GalleryEntryViewModel? _selectedEntry;
     private BitmapImage? _preview;
@@ -26,9 +43,11 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
     private GallerySortKey _sortKey = GallerySortKey.Taken;
     private bool _sortDescending = true;
 
-    public ScreenshotGalleryToolViewModel(IDeviceScreenshotService screenshots)
+    public ScreenshotGalleryToolViewModel(IScreenshotLibraryService library, IGallerySettingsStore settingsStore)
     {
-        _rootDirectory = screenshots.ScreenshotsDirectory;
+        _library = library;
+        _settingsStore = settingsStore;
+        _rootDirectory = library.RootDirectory;
         _currentDirectory = _rootDirectory;
 
         RefreshCommand = new RelayCommand(Refresh);
@@ -43,14 +62,63 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
         ToggleSortDirectionCommand = new RelayCommand(() => SetSort(_sortKey, !_sortDescending));
         OpenCommand = new RelayCommand(ActivateSelected, () => SelectedEntry is not null);
         RevealCommand = new RelayCommand(RevealSelected, () => SelectedEntry is not null);
-        NewFolderCommand = new RelayCommand(() => AnnouncePending("Создание папки"));
-        RenameCommand = new RelayCommand(() => AnnouncePending("Переименование"), () => SelectedEntry is not null);
-        MoveCommand = new RelayCommand(() => AnnouncePending("Перемещение"), () => SelectedEntries.Count > 0);
-        DeleteCommand = new RelayCommand(() => AnnouncePending("Удаление"), () => SelectedEntries.Count > 0);
+        NewFolderCommand = new RelayCommand(CreateFolder);
+        RenameCommand = new RelayCommand(BeginRename, () => SelectedEntry is not null);
+        MoveToCommand = new RelayCommand<GalleryMoveTargetViewModel>(MoveTo);
+        DeleteCommand = new RelayCommand(Delete, () => SelectedEntries.Count > 0);
 
         SelectedEntries.CollectionChanged += OnSelectedEntriesChanged;
 
+        _dispatcher = Dispatcher.CurrentDispatcher;
+        _syncTimer = new DispatcherTimer(SyncDelay, DispatcherPriority.Background, OnSyncTick, _dispatcher);
+        _syncTimer.Stop();
+
+        _saveTimer = new DispatcherTimer(SaveDelay, DispatcherPriority.Background, OnSaveTick, _dispatcher);
+        _saveTimer.Stop();
+
         Refresh();
+        StartWatching();
+
+        _ = LoadSettingsAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        var settings = await _settingsStore.ReadAsync() ?? GallerySettings.Default;
+
+        _sortKey = settings.SortKey switch
+        {
+            "name" => GallerySortKey.Name,
+            "size" => GallerySortKey.Size,
+            _ => GallerySortKey.Taken
+        };
+
+        _sortDescending = settings.SortDescending;
+        _listWidth = new GridLength(Math.Clamp(settings.ListWidth, 200, 900));
+
+        OnPropertyChanged(nameof(ListWidth));
+        SetSort(_sortKey, _sortDescending);
+    }
+
+    private void SaveSettingsSoon()
+    {
+        // Ширину тянут мышью — сохранять на каждый пиксель незачем.
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    private void OnSaveTick(object? sender, EventArgs e)
+    {
+        _saveTimer.Stop();
+
+        var key = _sortKey switch
+        {
+            GallerySortKey.Name => "name",
+            GallerySortKey.Size => "size",
+            _ => "taken"
+        };
+
+        _ = _settingsStore.WriteAsync(new GallerySettings(key, _sortDescending, _listWidth.Value));
     }
 
     public ObservableCollection<GalleryEntryViewModel> Entries { get; } = [];
@@ -75,7 +143,31 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
 
     public RelayCommand RenameCommand { get; }
 
-    public RelayCommand MoveCommand { get; }
+    public RelayCommand<GalleryMoveTargetViewModel> MoveToCommand { get; }
+
+    /// <summary>Куда можно перенести выделенное: подпапки текущей и уровень выше.</summary>
+    public ObservableCollection<GalleryMoveTargetViewModel> MoveTargets { get; } = [];
+
+    public bool HasMoveTargets => MoveTargets.Count > 0;
+
+    public bool HasEntries => Entries.Count > 0;
+
+    /// <summary>Ширина списка: её тянут разделителем, и она запоминается между запусками.</summary>
+    public GridLength ListWidth
+    {
+        get => _listWidth;
+        set
+        {
+            if (SetProperty(ref _listWidth, value))
+            {
+                SaveSettingsSoon();
+            }
+        }
+    }
+
+    public string EmptyStateMessage => IsAtRoot
+        ? "Снимков пока нет. Сделай снимок экрана во вкладке «Устройства» — он появится здесь сам."
+        : "Папка пуста. Перенеси сюда снимки через меню правой кнопки.";
 
     public RelayCommand DeleteCommand { get; }
 
@@ -236,8 +328,112 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
     public void Navigate(string directory)
     {
         _currentDirectory = directory;
+        SelectedEntry = null;
         Refresh();
         OnPropertyChanged(nameof(IsAtRoot));
+
+        // Слежение привязано к конкретной папке — переносим вместе с переходом.
+        StartWatching();
+    }
+
+    // ── слежение за папкой ───────────────────────────────────────────────
+
+    private void StartWatching()
+    {
+        StopWatching();
+
+        try
+        {
+            _watcher = new FileSystemWatcher(_currentDirectory)
+            {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite,
+                IncludeSubdirectories = false
+            };
+
+            _watcher.Created += OnFolderChanged;
+            _watcher.Deleted += OnFolderChanged;
+            _watcher.Changed += OnFolderChanged;
+            _watcher.Renamed += OnFolderChanged;
+            _watcher.Error += OnWatcherError;
+            _watcher.EnableRaisingEvents = true;
+        }
+        catch (Exception exception)
+        {
+            _watcher = null;
+            StatusText = $"Слежение за папкой не включилось: {exception.Message}. Обновляй по F5.";
+        }
+    }
+
+    private void StopWatching()
+    {
+        if (_watcher is null)
+        {
+            return;
+        }
+
+        _watcher.EnableRaisingEvents = false;
+        _watcher.Created -= OnFolderChanged;
+        _watcher.Deleted -= OnFolderChanged;
+        _watcher.Changed -= OnFolderChanged;
+        _watcher.Renamed -= OnFolderChanged;
+        _watcher.Error -= OnWatcherError;
+        _watcher.Dispose();
+        _watcher = null;
+    }
+
+    /// <summary>Событие приходит из потока слежения — трогать список оттуда нельзя.</summary>
+    private void OnFolderChanged(object sender, FileSystemEventArgs e)
+    {
+        _dispatcher.BeginInvoke(DispatcherPriority.Background, RestartSyncTimer);
+    }
+
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            StopWatching();
+
+            // Частая причина — папку удалили целиком. Обновление это заметит и уведёт выше.
+            Refresh();
+
+            if (_watcher is null)
+            {
+                StatusText = "Слежение за папкой прервалось. Обновляй по F5.";
+                StartWatching();
+            }
+        });
+    }
+
+    private void RestartSyncTimer()
+    {
+        _syncTimer.Stop();
+        _syncTimer.Start();
+    }
+
+    private void OnSyncTick(object? sender, EventArgs e)
+    {
+        _syncTimer.Stop();
+
+        // Переименование по месту не должно прерываться обновлением списка.
+        if (Entries.Any(entry => entry.IsEditing))
+        {
+            return;
+        }
+
+        Refresh();
+    }
+
+    public void Dispose()
+    {
+        StopWatching();
+        _syncTimer.Stop();
+
+        // Настройки могли не успеть уйти на диск — дописываем на закрытии.
+        if (_saveTimer.IsEnabled)
+        {
+            _saveTimer.Stop();
+            OnSaveTick(null, EventArgs.Empty);
+        }
     }
 
     private void SortBy(GallerySortKey key)
@@ -258,6 +454,7 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
         OnPropertyChanged(nameof(SortText));
 
         Refresh();
+        SaveSettingsSoon();
     }
 
     private void RevealSelected()
@@ -277,24 +474,182 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
         }
     }
 
-    private void AnnouncePending(string action)
+    // ── операции ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Папка создаётся сразу с рабочим именем и тут же встаёт в режим ввода — как в
+    /// проводнике. Так не нужен ни диалог, ни отдельный путь отмены.
+    /// </summary>
+    private void CreateFolder()
     {
-        StatusText = $"{action} появится на следующем этапе — сейчас это болванка раскладки.";
+        var name = "Новая папка";
+        var index = 2;
+
+        while (Directory.Exists(Path.Combine(_currentDirectory, name)))
+        {
+            name = $"Новая папка ({index++})";
+        }
+
+        var result = _library.CreateFolder(_currentDirectory, name);
+        StatusText = result.Message;
+
+        if (!result.IsSuccess)
+        {
+            return;
+        }
+
+        Refresh(result.Paths.FirstOrDefault());
+
+        if (SelectedEntry is { } created)
+        {
+            BeginRename(created);
+        }
+    }
+
+    private void BeginRename()
+    {
+        if (SelectedEntry is { } entry)
+        {
+            BeginRename(entry);
+        }
+    }
+
+    public void BeginRename(GalleryEntryViewModel entry)
+    {
+        foreach (var other in Entries)
+        {
+            other.IsEditing = false;
+        }
+
+        entry.EditName = entry.DisplayName;
+        entry.IsEditing = true;
+    }
+
+    public void CommitRename(GalleryEntryViewModel entry)
+    {
+        if (!entry.IsEditing)
+        {
+            return;
+        }
+
+        entry.IsEditing = false;
+
+        var name = entry.EditName.Trim();
+
+        if (name.Length == 0 || string.Equals(name, entry.DisplayName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var result = _library.Rename(entry.FullPath, name);
+        StatusText = result.Message;
+
+        Refresh(result.IsSuccess ? result.Paths.FirstOrDefault() : entry.FullPath);
+    }
+
+    public void CancelRename(GalleryEntryViewModel entry)
+    {
+        entry.IsEditing = false;
+        entry.EditName = entry.DisplayName;
+    }
+
+    private void Delete()
+    {
+        var doomed = SelectedEntries.Select(entry => entry.FullPath).ToArray();
+
+        if (doomed.Length == 0)
+        {
+            return;
+        }
+
+        // Превью держит удаляемый снимок на экране — снимаем выделение до операции.
+        SelectedEntry = null;
+
+        var result = _library.Delete(doomed);
+        StatusText = result.Message;
+
+        Refresh();
+    }
+
+    private void MoveTo(GalleryMoveTargetViewModel? target)
+    {
+        if (target is null)
+        {
+            return;
+        }
+
+        var moving = SelectedEntries.Select(entry => entry.FullPath).ToArray();
+
+        if (moving.Length == 0)
+        {
+            return;
+        }
+
+        SelectedEntry = null;
+
+        var result = _library.Move(moving, target.FullPath);
+        StatusText = result.Message;
+
+        Refresh();
     }
 
     private void Refresh()
     {
-        Entries.Clear();
-        SelectedEntry = null;
+        Refresh(null);
+    }
 
+    /// <summary>
+    /// Перечитывает папку и сводит список к прочитанному. Строки не пересоздаются:
+    /// иначе при обновлении раз в несколько секунд прокрутка прыгала бы к началу,
+    /// а выделение слетало.
+    /// </summary>
+    private void Refresh(string? pathToSelect)
+    {
+        if (ReadFolder() is not { } desired)
+        {
+            return;
+        }
+
+        ApplyEntries(desired);
+
+        RebuildCrumbs();
+        RebuildMoveTargets();
+
+        if (pathToSelect is not null &&
+            Entries.FirstOrDefault(entry => string.Equals(entry.FullPath, pathToSelect, StringComparison.OrdinalIgnoreCase)) is { } focused)
+        {
+            SelectedEntry = focused;
+        }
+
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(HasEntries));
+        OnPropertyChanged(nameof(EmptyStateMessage));
+    }
+
+    /// <summary>Читает папку в нужном порядке. Null — прочитать не удалось.</summary>
+    private List<GalleryEntryViewModel>? ReadFolder()
+    {
         try
         {
-            Directory.CreateDirectory(_currentDirectory);
+            // Создаём только корень — он может отсутствовать до первого снимка.
+            // Текущую папку не воссоздаём: удалённая снаружи, она иначе воскресала бы.
+            Directory.CreateDirectory(_rootDirectory);
 
-            foreach (var directory in Directory.EnumerateDirectories(_currentDirectory).OrderBy(Path.GetFileName, StringComparer.CurrentCultureIgnoreCase))
+            if (!Directory.Exists(_currentDirectory))
+            {
+                StatusText = "Папку удалили — вернулись на уровень выше.";
+                _currentDirectory = NearestExistingFolder(_currentDirectory);
+                StartWatching();
+                OnPropertyChanged(nameof(IsAtRoot));
+            }
+
+            var result = new List<GalleryEntryViewModel>();
+
+            foreach (var directory in Directory.EnumerateDirectories(_currentDirectory)
+                         .OrderBy(Path.GetFileName, StringComparer.CurrentCultureIgnoreCase))
             {
                 var info = new DirectoryInfo(directory);
-                Entries.Add(new GalleryEntryViewModel(
+                result.Add(new GalleryEntryViewModel(
                     info.FullName,
                     info.Name,
                     isFolder: true,
@@ -308,20 +663,150 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
                 .Select(path => new FileInfo(path))
                 .Select(Describe);
 
-            foreach (var entry in Sort(files))
-            {
-                Entries.Add(entry);
-            }
-
-            StatusText = string.Empty;
+            result.AddRange(Sort(files));
+            return result;
         }
         catch (Exception exception)
         {
             StatusText = $"Папка не прочиталась: {exception.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Сводит список к прочитанному минимальными правками: уцелевшие строки остаются
+    /// теми же объектами, поэтому выделение и режим ввода переживают обновление.
+    /// </summary>
+    private void ApplyEntries(List<GalleryEntryViewModel> desired)
+    {
+        var existing = new Dictionary<string, GalleryEntryViewModel>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in Entries)
+        {
+            existing[entry.FullPath] = entry;
         }
 
-        RebuildCrumbs();
-        OnPropertyChanged(nameof(SummaryText));
+        for (var index = 0; index < desired.Count; index++)
+        {
+            // Размер и время сверяем тоже: файл могли перезаписать под тем же именем.
+            if (existing.TryGetValue(desired[index].FullPath, out var reusable) &&
+                reusable.SizeBytes == desired[index].SizeBytes &&
+                reusable.Timestamp == desired[index].Timestamp)
+            {
+                desired[index] = reusable;
+            }
+        }
+
+        for (var index = 0; index < desired.Count; index++)
+        {
+            if (index < Entries.Count && ReferenceEquals(Entries[index], desired[index]))
+            {
+                continue;
+            }
+
+            var current = IndexOfSame(desired[index], index);
+
+            if (current >= 0)
+            {
+                Entries.Move(current, index);
+            }
+            else
+            {
+                Entries.Insert(index, desired[index]);
+            }
+        }
+
+        while (Entries.Count > desired.Count)
+        {
+            Entries.RemoveAt(Entries.Count - 1);
+        }
+    }
+
+    /// <summary>Ближайшая существующая папка вверх по дереву, но не выше корня.</summary>
+    private string NearestExistingFolder(string directory)
+    {
+        var current = Directory.GetParent(directory);
+
+        while (current is not null)
+        {
+            if (Directory.Exists(current.FullName) && IsInsideRoot(current.FullName))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return _rootDirectory;
+    }
+
+    private bool IsInsideRoot(string path)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_rootDirectory));
+
+        return string.Equals(full, root, StringComparison.OrdinalIgnoreCase) ||
+               full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int IndexOfSame(GalleryEntryViewModel entry, int from)
+    {
+        for (var index = from; index < Entries.Count; index++)
+        {
+            if (ReferenceEquals(Entries[index], entry))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Всё дерево папок от корня: иначе в глубоко вложенную папку пришлось бы
+    /// переносить в несколько приёмов, заходя в каждую по дороге.
+    /// </summary>
+    private void RebuildMoveTargets()
+    {
+        MoveTargets.Clear();
+
+        try
+        {
+            MoveTargets.Add(BuildMoveTarget(_rootDirectory, "Скриншоты", depth: 0));
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Дерево папок не прочиталось: {exception.Message}";
+        }
+
+        OnPropertyChanged(nameof(HasMoveTargets));
+    }
+
+    private static GalleryMoveTargetViewModel BuildMoveTarget(string directory, string title, int depth)
+    {
+        // Предохранитель от связок каталогов, зацикленных сами на себя.
+        var subdirectories = depth >= 16
+            ? []
+            : Directory.EnumerateDirectories(directory)
+                .OrderBy(Path.GetFileName, StringComparer.CurrentCultureIgnoreCase)
+                .Select(path => BuildMoveTarget(path, Path.GetFileName(path), depth + 1))
+                .ToArray();
+
+        if (subdirectories.Length == 0)
+        {
+            return new GalleryMoveTargetViewModel(title, directory);
+        }
+
+        // У пункта с вложенными щелчок раскрывает подменю, а не выполняет команду —
+        // поэтому саму папку выбираем первым пунктом внутри.
+        var children = new List<GalleryMoveTargetViewModel>(subdirectories.Length + 1)
+        {
+            new("в эту папку", directory)
+        };
+
+        children.AddRange(subdirectories);
+
+        return new GalleryMoveTargetViewModel(title, directory, children);
     }
 
     /// <summary>Папки в сортировке не участвуют — они всегда наверху, как в проводнике.</summary>
@@ -397,6 +882,7 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
 
         for (var index = 0; index < segments.Count; index++)
         {
+            segments[index].IsFirst = index == 0;
             segments[index].IsLast = index == segments.Count - 1;
             Crumbs.Add(segments[index]);
         }
@@ -438,9 +924,29 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
     private void OnSelectedEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(PropertiesText));
-        MoveCommand.NotifyCanExecuteChanged();
         DeleteCommand.NotifyCanExecuteChanged();
     }
+}
+
+/// <summary>
+/// Узел дерева папок для переноса. Папка с вложенными раскрывается подменю, а сама
+/// выбирается через первый пункт внутри: WPF не отдаёт команду по щелчку на пункте,
+/// у которого есть дочерние.
+/// </summary>
+public sealed class GalleryMoveTargetViewModel
+{
+    public GalleryMoveTargetViewModel(string title, string fullPath, IReadOnlyList<GalleryMoveTargetViewModel>? children = null)
+    {
+        Title = title;
+        FullPath = fullPath;
+        Children = children ?? [];
+    }
+
+    public string Title { get; }
+
+    public string FullPath { get; }
+
+    public IReadOnlyList<GalleryMoveTargetViewModel> Children { get; }
 }
 
 public enum GallerySortKey
@@ -452,6 +958,7 @@ public enum GallerySortKey
 
 public sealed class GalleryCrumbViewModel : ObservableObject
 {
+    private bool _isFirst;
     private bool _isLast;
 
     public GalleryCrumbViewModel(string title, string fullPath)
@@ -463,6 +970,13 @@ public sealed class GalleryCrumbViewModel : ObservableObject
     public string Title { get; }
 
     public string FullPath { get; }
+
+    /// <summary>Корневой сегмент рисуется как заголовок вкладки.</summary>
+    public bool IsFirst
+    {
+        get => _isFirst;
+        set => SetProperty(ref _isFirst, value);
+    }
 
     public bool IsLast
     {

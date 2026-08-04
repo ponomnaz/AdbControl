@@ -6,6 +6,8 @@ namespace AdbControl.Tools.Gallery.ViewModels;
 public sealed class GalleryEntryViewModel : ObservableObject
 {
     private string _displayName;
+    private string _editName = string.Empty;
+    private bool _isEditing;
 
     public GalleryEntryViewModel(
         string fullPath,
@@ -38,6 +40,19 @@ public sealed class GalleryEntryViewModel : ObservableObject
     {
         get => _displayName;
         set => SetProperty(ref _displayName, value);
+    }
+
+    /// <summary>Строка переименовывается по месту — как имена устройств.</summary>
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => SetProperty(ref _isEditing, value);
+    }
+
+    public string EditName
+    {
+        get => _editName;
+        set => SetProperty(ref _editName, value);
     }
 
     /// <summary>Дата съёмки в узкой колонке: сегодняшние — только временем.</summary>

@@ -63,6 +63,55 @@ public partial class ScreenshotGalleryToolView : UserControl
         _viewModel?.ActivateSelected();
     }
 
+    /// <summary>Поле появилось — сразу в него, с выделенным текстом: печатать можно немедленно.</summary>
+    private void OnEditorVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox editor || !editor.IsVisible)
+        {
+            return;
+        }
+
+        editor.Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Input,
+            () =>
+            {
+                editor.Focus();
+                editor.SelectAll();
+            });
+    }
+
+    private void OnEditorKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: GalleryEntryViewModel entry })
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                _viewModel?.CommitRename(entry);
+                EntryList.Focus();
+                e.Handled = true;
+                break;
+
+            case Key.Escape:
+                _viewModel?.CancelRename(entry);
+                EntryList.Focus();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>Уход фокуса применяет имя — так же ведёт себя проводник.</summary>
+    private void OnEditorLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: GalleryEntryViewModel entry })
+        {
+            _viewModel?.CommitRename(entry);
+        }
+    }
+
     private void OnPreviewWheel(object sender, MouseWheelEventArgs e)
     {
         if (_viewModel?.Preview is null)

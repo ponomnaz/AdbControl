@@ -3,6 +3,7 @@ using AdbControl.Application.Apk;
 using AdbControl.Application.Common;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Files;
 using AdbControl.Application.Logcat;
 using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
@@ -28,6 +29,8 @@ public sealed class WorkspaceService : ObservableObject
     private readonly IAdbConnectionService _adbConnection;
     private readonly IDeviceActionService _deviceActions;
     private readonly IDeviceScreenshotService _deviceScreenshots;
+    private readonly IScreenshotLibraryService _screenshotLibrary;
+    private readonly IGallerySettingsStore _gallerySettings;
     private readonly IDeviceLogcatService _deviceLogcat;
     private readonly LogcatSettingsCatalog _logcatSettings;
     private readonly IAdbConsoleService _adbConsole;
@@ -52,6 +55,8 @@ public sealed class WorkspaceService : ObservableObject
         IAdbConnectionService adbConnection,
         IDeviceActionService deviceActions,
         IDeviceScreenshotService deviceScreenshots,
+        IScreenshotLibraryService screenshotLibrary,
+        IGallerySettingsStore gallerySettings,
         IDeviceLogcatService deviceLogcat,
         LogcatSettingsCatalog logcatSettings,
         IAdbConsoleService adbConsole,
@@ -74,6 +79,8 @@ public sealed class WorkspaceService : ObservableObject
         _adbConnection = adbConnection;
         _deviceActions = deviceActions;
         _deviceScreenshots = deviceScreenshots;
+        _screenshotLibrary = screenshotLibrary;
+        _gallerySettings = gallerySettings;
         _deviceLogcat = deviceLogcat;
         _logcatSettings = logcatSettings;
         _adbConsole = adbConsole;
@@ -192,6 +199,8 @@ public sealed class WorkspaceService : ObservableObject
             _adbConnection,
             _deviceActions,
             _deviceScreenshots,
+            _screenshotLibrary,
+            _gallerySettings,
             _deviceLogcat,
             _logcatSettings,
             _adbConsole,

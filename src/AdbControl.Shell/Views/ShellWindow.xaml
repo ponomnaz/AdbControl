@@ -17,7 +17,10 @@
         WindowStartupLocation="CenterScreen">
     <Grid Background="{DynamicResource Brush.BackgroundPrimary}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="184" />
+            <!-- 212 = самый длинный заголовок «Подключение» (94 px) + полоса прокрутки 14
+                 + плашка значка 40 + отступы кнопки, панели и поля. При 184 полоса
+                 прокрутки съедала последние пиксели и заголовки обрезались. -->
+            <ColumnDefinition Width="212" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -67,9 +70,14 @@
                                                        Text="{Binding Glyph}" />
                                         </Border>
                                         <StackPanel Grid.Column="1">
+                                            <!-- Подстраховка на случай длинных названий: лучше
+                                                 многоточие с подсказкой, чем обрезанная буква. -->
                                             <TextBlock FontWeight="SemiBold"
                                                        VerticalAlignment="Center"
-                                                       Text="{Binding Title}" />
+                                                       TextWrapping="NoWrap"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Title}"
+                                                       ToolTip="{Binding Title}" />
                                         </StackPanel>
                                         <Border Grid.Column="2"
                                                 Margin="10,0,0,0"

@@ -1,6 +1,7 @@
 using AdbControl.Application.Apk;
 using AdbControl.Application.Devices;
 using AdbControl.Application.Diagnostics;
+using AdbControl.Application.Files;
 using AdbControl.Application.Logcat;
 using AdbControl.Application.Remote;
 using AdbControl.Application.Terminal;
@@ -8,6 +9,7 @@ using AdbControl.Application.Tools;
 using AdbControl.Application.Workspace;
 using AdbControl.Core.Devices;
 using AdbControl.Infrastructure.Devices;
+using AdbControl.Infrastructure.Files;
 using AdbControl.Infrastructure.Persistence;
 using AdbControl.Shell.ViewModels;
 using AdbControl.Shell.Views;
@@ -70,6 +72,8 @@ public partial class App : System.Windows.Application
         IApkDevicePackageService apkDevicePackages = new AdbApkDevicePackageService(adbProcessRunner);
         var deviceActions = new AdbDeviceActionService(adbProcessRunner);
         IDeviceScreenshotService deviceScreenshots = new AdbScreenshotService(storage.Paths, commandTraceJournal);
+        IScreenshotLibraryService screenshotLibrary = new ScreenshotLibraryService(deviceScreenshots.ScreenshotsDirectory);
+        IGallerySettingsStore gallerySettings = new GallerySettingsFileStore(storage.Paths);
         IDeviceLogcatService deviceLogcat = new AdbLogcatService(adbProcessRunner, commandTraceJournal);
         var logcatSettings = new LogcatSettingsCatalog(new LogcatSettingsFileStore(storage.Paths));
         await logcatSettings.InitializeAsync();
@@ -110,6 +114,8 @@ public partial class App : System.Windows.Application
             adbConnection,
             deviceActions,
             deviceScreenshots,
+            screenshotLibrary,
+            gallerySettings,
             deviceLogcat,
             logcatSettings,
             adbConsole,

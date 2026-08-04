@@ -9,14 +9,37 @@
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
+        <!-- Первый сегмент пути крупный: он же заголовок вкладки. -->
+        <Style x:Key="CrumbButtonStyle" TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                    <Setter Property="FontSize" Value="{DynamicResource FontSize.Page}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Разделитель пути прячется у последнего сегмента. -->
         <Style x:Key="CrumbSeparatorStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
-            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="Margin" Value="2,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSize.Section}" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
             <Setter Property="Visibility" Value="Visible" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsLast}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Отчёт об операции: пока пусто — строка не занимает место. -->
+        <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusText}" Value="">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
@@ -38,6 +61,40 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
                     <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Поле ввода занимает место имени только на время переименования. -->
+        <Style x:Key="EntryEditorStyle" TargetType="TextBox" BasedOn="{StaticResource TextBoxInputStyle}">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="Padding" Value="4,1" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Дерево папок в подменю: стиль ссылается сам на себя, поэтому вложенность
+             любой глубины разворачивается без отдельного шаблона на каждый уровень. -->
+        <Style x:Key="MoveTargetMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Header" Value="{Binding Title}" />
+            <Setter Property="ItemsSource" Value="{Binding Children}" />
+            <Setter Property="ItemContainerStyle" Value="{DynamicResource MoveTargetMenuItemStyle}" />
+            <Setter Property="Command"
+                    Value="{Binding DataContext.MoveToCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Setter Property="CommandParameter" Value="{Binding}" />
+        </Style>
+
+        <Style x:Key="EmptyListStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasEntries}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -76,40 +133,34 @@
         <Border Style="{DynamicResource PanelSurfaceStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock VerticalAlignment="Center"
-                           Margin="0,0,16,0"
-                           Style="{DynamicResource Text.PageTitleStyle}"
-                           Text="Скриншоты" />
+                <!-- Заголовок вкладки — это и есть первый сегмент пути. Отдельная надпись
+                     «Скриншоты» рядом с крошкой «Скриншоты» просто дублировала слово. -->
+                <ItemsControl ItemsSource="{Binding Crumbs}"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        Content="{Binding Title}"
+                                        Style="{StaticResource CrumbButtonStyle}" />
+                                <TextBlock Style="{StaticResource CrumbSeparatorStyle}" Text="›" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                <WrapPanel Grid.Column="1"
-                           VerticalAlignment="Center">
-                    <ItemsControl ItemsSource="{Binding Crumbs}"
-                                  VerticalAlignment="Center">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"
-                                            Content="{Binding Title}"
-                                            Style="{DynamicResource GhostButtonStyle}" />
-                                    <TextBlock Style="{StaticResource CrumbSeparatorStyle}" Text="›" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </WrapPanel>
-
-                <StackPanel Grid.Column="2"
+                <StackPanel Grid.Column="1"
+                            Margin="16,0,0,0"
                             VerticalAlignment="Center"
                             HorizontalAlignment="Right">
                     <TextBlock HorizontalAlignment="Right"
@@ -117,8 +168,9 @@
                                Text="{Binding SummaryText}" />
                     <TextBlock HorizontalAlignment="Right"
                                MaxWidth="420"
+                               TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis"
-                               Style="{DynamicResource Text.CaptionStyle}"
+                               Style="{StaticResource StatusTextStyle}"
                                Text="{Binding StatusText}" />
                 </StackPanel>
             </Grid>
@@ -129,7 +181,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="240" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="300" MinWidth="200" />
+                <ColumnDefinition Width="{Binding ListWidth, Mode=TwoWay}" MinWidth="200" MaxWidth="900" />
             </Grid.ColumnDefinitions>
 
             <Border Style="{DynamicResource PanelSurfaceStyle}">
@@ -243,40 +295,26 @@
                          MouseDoubleClick="OnEntryDoubleClick"
                          Style="{DynamicResource WorkbenchListBoxStyle}"
                          ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
+                    <ListBox.InputBindings>
+                        <KeyBinding Key="F2" Command="{Binding RenameCommand}" />
+                        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
+                        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+                        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewFolderCommand}" />
+                    </ListBox.InputBindings>
                     <ListBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Command="{Binding OpenCommand}" Header="Открыть" InputGestureText="2× щелчок" />
                             <MenuItem Command="{Binding RevealCommand}" Header="Показать в проводнике" />
                             <Separator />
                             <MenuItem Command="{Binding RenameCommand}" Header="Переименовать" InputGestureText="F2" />
-                            <MenuItem Command="{Binding MoveCommand}" Header="Переместить в папку…" />
+                            <MenuItem Header="Переместить в папку"
+                                      IsEnabled="{Binding HasMoveTargets}"
+                                      ItemsSource="{Binding MoveTargets}"
+                                      ItemContainerStyle="{DynamicResource MoveTargetMenuItemStyle}" />
                             <MenuItem Command="{Binding NewFolderCommand}" Header="Создать папку" InputGestureText="Ctrl+N" />
                             <Separator />
                             <MenuItem Command="{Binding DeleteCommand}" Header="Удалить в корзину" InputGestureText="Del" />
                             <Separator />
-                            <Separator />
-                            <MenuItem Header="Сортировка">
-                                <MenuItem Command="{Binding SortByCommand}"
-                                          CommandParameter="{x:Static viewModels:GallerySortKey.Taken}"
-                                          Header="По дате съёмки"
-                                          IsCheckable="True"
-                                          IsChecked="{Binding IsSortedByTaken, Mode=OneWay}" />
-                                <MenuItem Command="{Binding SortByCommand}"
-                                          CommandParameter="{x:Static viewModels:GallerySortKey.Name}"
-                                          Header="По имени"
-                                          IsCheckable="True"
-                                          IsChecked="{Binding IsSortedByName, Mode=OneWay}" />
-                                <MenuItem Command="{Binding SortByCommand}"
-                                          CommandParameter="{x:Static viewModels:GallerySortKey.Size}"
-                                          Header="По размеру"
-                                          IsCheckable="True"
-                                          IsChecked="{Binding IsSortedBySize, Mode=OneWay}" />
-                                <Separator />
-                                <MenuItem Command="{Binding ToggleSortDirectionCommand}"
-                                          Header="По убыванию"
-                                          IsCheckable="True"
-                                          IsChecked="{Binding IsSortDescending, Mode=OneWay}" />
-                            </MenuItem>
                             <MenuItem Command="{Binding RefreshCommand}" Header="Обновить" InputGestureText="F5" />
                         </ContextMenu>
                     </ListBox.ContextMenu>
@@ -312,6 +350,14 @@
                                            Text="{Binding DisplayName}"
                                            ToolTip="{Binding FileName}" />
 
+                                <TextBox Grid.Column="1"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource EntryEditorStyle}"
+                                         Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                         IsVisibleChanged="OnEditorVisibleChanged"
+                                         PreviewKeyDown="OnEditorKeyDown"
+                                         LostKeyboardFocus="OnEditorLostFocus" />
+
                                 <TextBlock Grid.Column="2"
                                            Margin="12,0,0,0"
                                            VerticalAlignment="Center"
@@ -321,6 +367,15 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <TextBlock Grid.Row="1"
+                               Margin="12,24,12,0"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Top"
+                               TextAlignment="Center"
+                               IsHitTestVisible="False"
+                               Style="{StaticResource EmptyListStyle}"
+                               Text="{Binding EmptyStateMessage}" />
                 </Grid>
             </Border>
         </Grid>

@@ -27,7 +27,7 @@ public sealed class GalleryToolModule : IToolModule
                 WorkspaceHost.MainTab,
                 "IMG",
                 SortOrder: 40),
-            context => new ScreenshotGalleryToolViewModel(context.DeviceScreenshots),
+            context => new ScreenshotGalleryToolViewModel(context.ScreenshotLibrary, context.GallerySettings),
             ShowInNavigation: true,
             OpenOnStartup: false,
             ReuseExistingTab: true);
