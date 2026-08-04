@@ -14,6 +14,7 @@ using AdbControl.Shell.Views;
 using AdbControl.Tools.CommandLog;
 using AdbControl.Tools.Console;
 using AdbControl.Tools.Devices;
+using AdbControl.Tools.Gallery;
 using AdbControl.Tools.Home;
 using AdbControl.Tools.Library;
 using AdbControl.Tools.Logcat;
@@ -85,6 +86,7 @@ public partial class App : System.Windows.Application
             new LogcatToolModule(),
             new TopToolModule(),
             new RemoteToolModule(),
+            new GalleryToolModule(),
             new CommandLogToolModule(),
             new ToolLibraryModule()
         ];

@@ -1,0 +1,328 @@
+<UserControl x:Class="AdbControl.Tools.Gallery.Views.ScreenshotGalleryToolView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
+             xmlns:viewModels="clr-namespace:AdbControl.Tools.Gallery.ViewModels"
+             mc:Ignorable="d"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+    <UserControl.Resources>
+        <!-- Разделитель пути прячется у последнего сегмента. -->
+        <Style x:Key="CrumbSeparatorStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextDisabled}" />
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsLast}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="EmptyPreviewStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasPreview}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Строка списка: значок, имя слева, время справа. -->
+        <Style x:Key="EntryNameStyle" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Значки нарисованы здесь: набора иконок в теме пока нет. -->
+        <Geometry x:Key="Icon.Folder">M0.5,4 L0.5,1.5 L5,1.5 L6.5,4 L14.5,4 L14.5,12.5 L0.5,12.5 Z</Geometry>
+        <Geometry x:Key="Icon.ImageFrame">M0.5,2.5 L14.5,2.5 L14.5,12.5 L0.5,12.5 Z</Geometry>
+        <Geometry x:Key="Icon.ImageHills">M2,11.5 L5.5,6.5 L8,9.6 L9.8,7.6 L13,11.5 Z</Geometry>
+
+        <Style x:Key="FolderIconStyle" TargetType="Path">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ImageIconStyle" TargetType="Path">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ── путь ────────────────────────────────────────────── -->
+        <Border Style="{DynamicResource PanelSurfaceStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,16,0"
+                           Style="{DynamicResource Text.PageTitleStyle}"
+                           Text="Скриншоты" />
+
+                <WrapPanel Grid.Column="1"
+                           VerticalAlignment="Center">
+                    <ItemsControl ItemsSource="{Binding Crumbs}"
+                                  VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Content="{Binding Title}"
+                                            Style="{DynamicResource GhostButtonStyle}" />
+                                    <TextBlock Style="{StaticResource CrumbSeparatorStyle}" Text="›" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </WrapPanel>
+
+                <StackPanel Grid.Column="2"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
+                    <TextBlock HorizontalAlignment="Right"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="{Binding SummaryText}" />
+                    <TextBlock HorizontalAlignment="Right"
+                               MaxWidth="420"
+                               TextTrimming="CharacterEllipsis"
+                               Style="{DynamicResource Text.CaptionStyle}"
+                               Text="{Binding StatusText}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── превью слева, список справа ─────────────────────── -->
+        <Grid Grid.Row="1" Margin="0,6,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="240" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="300" MinWidth="200" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{DynamicResource PanelSurfaceStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Background="{DynamicResource Brush.SurfaceAlt}"
+                            BorderBrush="{DynamicResource Brush.BorderDefault}"
+                            BorderThickness="1"
+                            CornerRadius="{DynamicResource Radius.Control}"
+                            ClipToBounds="True">
+                        <Grid>
+                            <ScrollViewer x:Name="PreviewScroll"
+                                          Background="Transparent"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          Style="{DynamicResource WorkbenchScrollViewerStyle}"
+                                          PreviewMouseWheel="OnPreviewWheel"
+                                          PreviewMouseLeftButtonDown="OnPreviewMouseDown"
+                                          PreviewMouseMove="OnPreviewMouseMove"
+                                          PreviewMouseLeftButtonUp="OnPreviewMouseUp"
+                                          MouseDoubleClick="OnPreviewDoubleClick">
+                                <Image x:Name="PreviewImage"
+                                       Margin="8"
+                                       Source="{Binding Preview}"
+                                       Stretch="Uniform"
+                                       StretchDirection="DownOnly"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                            </ScrollViewer>
+
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource EmptyPreviewStyle}"
+                                       Text="Выбери снимок в списке справа" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1" Margin="2,8,2,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="{Binding PropertiesText}" />
+
+                        <TextBlock x:Name="ZoomText"
+                                   Grid.Column="1"
+                                   Margin="12,0,0,0"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   ToolTip="Колесо — масштаб, двойной щелчок — вписать или 100%, перетаскивание — сдвиг" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="6"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
+                          Background="Transparent"
+                          ResizeBehavior="PreviousAndNext" />
+
+            <Border Grid.Column="2" Style="{DynamicResource PanelSurfaceStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Шапка сортировки: щелчок переключает колонку, повторный — порядок. -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button HorizontalContentAlignment="Left"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static viewModels:GallerySortKey.Name}"
+                                Content="Имя"
+                                Style="{DynamicResource GhostButtonStyle}"
+                                ToolTip="Сортировать по имени" />
+
+                        <Button Grid.Column="1"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static viewModels:GallerySortKey.Size}"
+                                Content="Размер"
+                                Style="{DynamicResource GhostButtonStyle}"
+                                ToolTip="Сортировать по размеру файла" />
+
+                        <Button Grid.Column="2"
+                                Command="{Binding SortByCommand}"
+                                CommandParameter="{x:Static viewModels:GallerySortKey.Taken}"
+                                Content="{Binding SortText}"
+                                Style="{DynamicResource GhostButtonStyle}"
+                                ToolTip="Сортировать по времени съёмки" />
+                    </Grid>
+
+                    <ListBox x:Name="EntryList"
+                         Grid.Row="1"
+                         ItemsSource="{Binding Entries}"
+                         SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
+                         SelectionMode="Extended"
+                         behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedEntries}"
+                         MouseDoubleClick="OnEntryDoubleClick"
+                         Style="{DynamicResource WorkbenchListBoxStyle}"
+                         ItemContainerStyle="{DynamicResource WorkbenchListBoxItemStyle}">
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Command="{Binding OpenCommand}" Header="Открыть" InputGestureText="2× щелчок" />
+                            <MenuItem Command="{Binding RevealCommand}" Header="Показать в проводнике" />
+                            <Separator />
+                            <MenuItem Command="{Binding RenameCommand}" Header="Переименовать" InputGestureText="F2" />
+                            <MenuItem Command="{Binding MoveCommand}" Header="Переместить в папку…" />
+                            <MenuItem Command="{Binding NewFolderCommand}" Header="Создать папку" InputGestureText="Ctrl+N" />
+                            <Separator />
+                            <MenuItem Command="{Binding DeleteCommand}" Header="Удалить в корзину" InputGestureText="Del" />
+                            <Separator />
+                            <Separator />
+                            <MenuItem Header="Сортировка">
+                                <MenuItem Command="{Binding SortByCommand}"
+                                          CommandParameter="{x:Static viewModels:GallerySortKey.Taken}"
+                                          Header="По дате съёмки"
+                                          IsCheckable="True"
+                                          IsChecked="{Binding IsSortedByTaken, Mode=OneWay}" />
+                                <MenuItem Command="{Binding SortByCommand}"
+                                          CommandParameter="{x:Static viewModels:GallerySortKey.Name}"
+                                          Header="По имени"
+                                          IsCheckable="True"
+                                          IsChecked="{Binding IsSortedByName, Mode=OneWay}" />
+                                <MenuItem Command="{Binding SortByCommand}"
+                                          CommandParameter="{x:Static viewModels:GallerySortKey.Size}"
+                                          Header="По размеру"
+                                          IsCheckable="True"
+                                          IsChecked="{Binding IsSortedBySize, Mode=OneWay}" />
+                                <Separator />
+                                <MenuItem Command="{Binding ToggleSortDirectionCommand}"
+                                          Header="По убыванию"
+                                          IsCheckable="True"
+                                          IsChecked="{Binding IsSortDescending, Mode=OneWay}" />
+                            </MenuItem>
+                            <MenuItem Command="{Binding RefreshCommand}" Header="Обновить" InputGestureText="F5" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Width="15" Height="14"
+                                      Margin="0,0,8,0"
+                                      VerticalAlignment="Center">
+                                    <Path Data="{StaticResource Icon.Folder}"
+                                          Fill="{DynamicResource Brush.AccentSelection}"
+                                          Stroke="{DynamicResource Brush.TextSecondary}"
+                                          StrokeThickness="1"
+                                          Style="{StaticResource FolderIconStyle}" />
+                                    <Path Data="{StaticResource Icon.ImageFrame}"
+                                          Stroke="{DynamicResource Brush.TextSecondary}"
+                                          StrokeThickness="1"
+                                          Style="{StaticResource ImageIconStyle}" />
+                                    <Path Data="{StaticResource Icon.ImageHills}"
+                                          Fill="{DynamicResource Brush.TextDisabled}"
+                                          Style="{StaticResource ImageIconStyle}" />
+                                </Grid>
+
+                                <TextBlock Grid.Column="1"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource EntryNameStyle}"
+                                           Text="{Binding DisplayName}"
+                                           ToolTip="{Binding FileName}" />
+
+                                <TextBlock Grid.Column="2"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Style="{DynamicResource Text.CaptionStyle}"
+                                           Text="{Binding TimestampText}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
