@@ -32,7 +32,13 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject
         _currentDirectory = _rootDirectory;
 
         RefreshCommand = new RelayCommand(Refresh);
-        NavigateCommand = new RelayCommand<GalleryCrumbViewModel>(crumb => Navigate(crumb.FullPath));
+        NavigateCommand = new RelayCommand<GalleryCrumbViewModel>(crumb =>
+        {
+            if (crumb is not null)
+            {
+                Navigate(crumb.FullPath);
+            }
+        });
         SortByCommand = new RelayCommand<GallerySortKey>(SortBy);
         ToggleSortDirectionCommand = new RelayCommand(() => SetSort(_sortKey, !_sortDescending));
         OpenCommand = new RelayCommand(ActivateSelected, () => SelectedEntry is not null);
