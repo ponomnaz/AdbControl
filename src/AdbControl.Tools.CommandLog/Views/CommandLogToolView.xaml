@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:behaviors="clr-namespace:AdbControl.Tools.CommandLog.Behaviors"
+             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
@@ -121,7 +121,7 @@
                              Margin="0,8,0,0"
                              ItemsSource="{Binding VisibleEntries}"
                              SelectionMode="Single"
-                             behaviors:ListBoxSelectionBehavior.SelectedItems="{Binding SelectedEntries}"
+                             behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedEntries}"
                              Style="{StaticResource CommandLogListBoxStyle}"
                              ItemContainerStyle="{StaticResource CommandLogEntryListBoxItemStyle}">
                         <ListBox.InputBindings>

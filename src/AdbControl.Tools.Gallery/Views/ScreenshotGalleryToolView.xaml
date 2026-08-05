@@ -35,16 +35,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Отчёт об операции: пока пусто — строка не занимает место. -->
-        <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.CaptionStyle}">
-            <Setter Property="Margin" Value="0,2,0,0" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding StatusText}" Value="">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <Style x:Key="EmptyPreviewStyle" TargetType="TextBlock" BasedOn="{StaticResource Text.BodyMutedStyle}">
             <Setter Property="Visibility" Value="Visible" />
             <Style.Triggers>
@@ -159,20 +149,12 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <StackPanel Grid.Column="1"
-                            Margin="16,0,0,0"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Right">
-                    <TextBlock HorizontalAlignment="Right"
-                               Style="{DynamicResource Text.CaptionStyle}"
-                               Text="{Binding SummaryText}" />
-                    <TextBlock HorizontalAlignment="Right"
-                               MaxWidth="420"
-                               TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis"
-                               Style="{StaticResource StatusTextStyle}"
-                               Text="{Binding StatusText}" />
-                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Margin="16,0,0,0"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           Style="{DynamicResource Text.CaptionStyle}"
+                           Text="{Binding SummaryText}" />
             </Grid>
         </Border>
 

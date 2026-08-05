@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
+using AdbControl.Shell.Behaviors;
 using AdbControl.Tools.Console.ViewModels;
 
 namespace AdbControl.Tools.Console.Views;
@@ -98,7 +98,7 @@ public partial class AdbConsoleToolView : UserControl
             return;
         }
 
-        _scrollViewer = FindVisualChild<ScrollViewer>(OutputTextBox);
+        _scrollViewer = VisualTreeSearch.FindDescendant<ScrollViewer>(OutputTextBox);
         if (_scrollViewer is not null)
         {
             _followTail = IsAtBottom(_scrollViewer);
@@ -196,30 +196,4 @@ public partial class AdbConsoleToolView : UserControl
         return scrollViewer.VerticalOffset >= scrollViewer.ScrollableHeight - BottomTolerance;
     }
 
-    private static T? FindVisualChild<T>(DependencyObject? root)
-        where T : DependencyObject
-    {
-        if (root is null)
-        {
-            return null;
-        }
-
-        var childrenCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < childrenCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T typedChild)
-            {
-                return typedChild;
-            }
-
-            var nested = FindVisualChild<T>(child);
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
-    }
 }

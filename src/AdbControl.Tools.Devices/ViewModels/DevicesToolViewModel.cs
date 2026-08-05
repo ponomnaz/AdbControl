@@ -355,30 +355,84 @@ public sealed class DevicesToolViewModel : ObservableObject
         _isRefreshingSelection = true;
         try
         {
-            KnownDevices.Clear();
-            SelectedRows.Clear();
+            var index = 0;
 
             foreach (var device in _deviceInventory.KnownDevices)
             {
-                var row = new KnownDeviceRowViewModel(
-                    device,
-                    GetDeviceKey(device),
-                    device.NetworkEndpoint ?? AdbTransportName.Describe(device.Id),
-                    GetConnectionLabel(device.PreferredConnection),
-                    GetReachabilityLabel(device.Reachability));
+                var key = GetDeviceKey(device);
+                var endpoint = device.NetworkEndpoint ?? AdbTransportName.Describe(device.Id);
+                var connection = GetConnectionLabel(device.PreferredConnection);
+                var reachability = GetReachabilityLabel(device.Reachability);
 
-                row.ApplyAlias(_deviceAliases.GetAlias(row.AliasKey));
-                KnownDevices.Add(row);
-
-                if (selectedKeys.Contains(row.AliasKey))
+                if (FindRow(key) is { } existing)
                 {
-                    SelectedRows.Add(row);
+                    existing.Update(device, endpoint, connection, reachability);
+                    existing.ApplyAlias(_deviceAliases.GetAlias(key));
+
+                    var current = KnownDevices.IndexOf(existing);
+                    if (current != index)
+                    {
+                        KnownDevices.Move(current, index);
+                    }
                 }
+                else
+                {
+                    var row = new KnownDeviceRowViewModel(device, key, endpoint, connection, reachability);
+                    row.ApplyAlias(_deviceAliases.GetAlias(key));
+                    KnownDevices.Insert(index, row);
+                }
+
+                index++;
             }
+
+            while (KnownDevices.Count > index)
+            {
+                KnownDevices.RemoveAt(KnownDevices.Count - 1);
+            }
+
+            SyncSelectedRows(selectedKeys);
         }
         finally
         {
             _isRefreshingSelection = false;
+        }
+    }
+
+    private KnownDeviceRowViewModel? FindRow(string aliasKey)
+    {
+        foreach (var row in KnownDevices)
+        {
+            if (string.Equals(row.AliasKey, aliasKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Выделение правится точечно теми же объектами строк: пересобранное целиком, оно
+    /// сбрасывалось при каждом обновлении списка устройств.
+    /// </summary>
+    private void SyncSelectedRows(IReadOnlySet<string> selectedKeys)
+    {
+        for (var index = SelectedRows.Count - 1; index >= 0; index--)
+        {
+            var row = SelectedRows[index];
+
+            if (!selectedKeys.Contains(row.AliasKey) || !KnownDevices.Contains(row))
+            {
+                SelectedRows.RemoveAt(index);
+            }
+        }
+
+        foreach (var row in KnownDevices)
+        {
+            if (selectedKeys.Contains(row.AliasKey) && !SelectedRows.Contains(row))
+            {
+                SelectedRows.Add(row);
+            }
         }
     }
 
@@ -533,6 +587,10 @@ public sealed class KnownDeviceRowViewModel : ObservableObject
     private string _aliasDraft = string.Empty;
     private bool _isEditingAlias;
     private bool _hasSecondaryText;
+    private TvDeviceProfile _device;
+    private string _endpoint;
+    private string _connectionKind;
+    private string _reachability;
 
     public KnownDeviceRowViewModel(
         TvDeviceProfile device,
@@ -541,23 +599,52 @@ public sealed class KnownDeviceRowViewModel : ObservableObject
         string connectionKind,
         string reachability)
     {
-        Device = device;
+        _device = device;
         AliasKey = aliasKey;
-        Endpoint = endpoint;
-        ConnectionKind = connectionKind;
-        Reachability = reachability;
+        _endpoint = endpoint;
+        _connectionKind = connectionKind;
+        _reachability = reachability;
         _title = endpoint;
     }
 
-    public TvDeviceProfile Device { get; }
+    public TvDeviceProfile Device
+    {
+        get => _device;
+        private set => SetProperty(ref _device, value);
+    }
 
+    /// <summary>Опознание строки при сверке списка: не меняется, пока это то же устройство.</summary>
     public string AliasKey { get; }
 
-    public string Endpoint { get; }
+    public string Endpoint
+    {
+        get => _endpoint;
+        private set => SetProperty(ref _endpoint, value);
+    }
 
-    public string ConnectionKind { get; }
+    public string ConnectionKind
+    {
+        get => _connectionKind;
+        private set => SetProperty(ref _connectionKind, value);
+    }
 
-    public string Reachability { get; }
+    public string Reachability
+    {
+        get => _reachability;
+        private set => SetProperty(ref _reachability, value);
+    }
+
+    /// <summary>
+    /// Обновление на месте вместо пересоздания строки: пересозданная теряет выделение
+    /// и открытое поле ввода имени.
+    /// </summary>
+    public void Update(TvDeviceProfile device, string endpoint, string connectionKind, string reachability)
+    {
+        Device = device;
+        Endpoint = endpoint;
+        ConnectionKind = connectionKind;
+        Reachability = reachability;
+    }
 
     public string Title
     {

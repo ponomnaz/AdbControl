@@ -304,6 +304,18 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject, IDisposab
 
     public void ActivateSelected()
     {
+        // Выделено несколько — открываем все снимки, как это делает кнопка съёмки
+        // во вкладке «Устройства». Папки в наборе пропускаем: заходить можно в одну.
+        if (SelectedEntries.Count > 1)
+        {
+            foreach (var file in SelectedEntries.Where(entry => !entry.IsFolder).ToArray())
+            {
+                OpenFile(file);
+            }
+
+            return;
+        }
+
         if (SelectedEntry is not { } entry)
         {
             return;
@@ -315,6 +327,11 @@ public sealed class ScreenshotGalleryToolViewModel : ObservableObject, IDisposab
             return;
         }
 
+        OpenFile(entry);
+    }
+
+    private void OpenFile(GalleryEntryViewModel entry)
+    {
         try
         {
             Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });

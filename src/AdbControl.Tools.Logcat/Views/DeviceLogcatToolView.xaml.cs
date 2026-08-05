@@ -1,7 +1,7 @@
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using AdbControl.Shell.Behaviors;
 
 namespace AdbControl.Tools.Logcat.Views;
 
@@ -47,7 +47,7 @@ public partial class DeviceLogcatToolView : UserControl
 
         // Прокрутка живёт внутри шаблона списка и появляется только после его построения.
         LogOutputList.ApplyTemplate();
-        _scrollViewer = FindVisualChild<ScrollViewer>(LogOutputList);
+        _scrollViewer = VisualTreeSearch.FindDescendant<ScrollViewer>(LogOutputList);
 
         if (_scrollViewer is not null)
         {
@@ -113,30 +113,4 @@ public partial class DeviceLogcatToolView : UserControl
         }
     }
 
-    private static T? FindVisualChild<T>(DependencyObject? root)
-        where T : DependencyObject
-    {
-        if (root is null)
-        {
-            return null;
-        }
-
-        var childrenCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < childrenCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T typedChild)
-            {
-                return typedChild;
-            }
-
-            var nested = FindVisualChild<T>(child);
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
-    }
 }

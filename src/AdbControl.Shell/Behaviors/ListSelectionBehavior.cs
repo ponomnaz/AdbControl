@@ -755,44 +755,13 @@ public static class ListSelectionBehavior
     private static T? FindDescendant<T>(DependencyObject root)
         where T : DependencyObject
     {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < count; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T match)
-            {
-                return match;
-            }
-
-            if (FindDescendant<T>(child) is { } nested)
-            {
-                return nested;
-            }
-        }
-
-        return null;
+        return VisualTreeSearch.FindDescendant<T>(root);
     }
 
     private static T? FindAncestor<T>(DependencyObject? current)
         where T : DependencyObject
     {
-        while (current is not null)
-        {
-            if (current is T match)
-            {
-                return match;
-            }
-
-            current = current switch
-            {
-                Visual or Visual3D => VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current),
-                FrameworkContentElement frameworkContentElement => frameworkContentElement.Parent ?? LogicalTreeHelper.GetParent(frameworkContentElement),
-                ContentElement contentElement => ContentOperations.GetParent(contentElement) ?? LogicalTreeHelper.GetParent(contentElement),
-                _ => LogicalTreeHelper.GetParent(current)
-            };
-        }
-
-        return null;
+        return VisualTreeSearch.FindAncestor<T>(current);
     }
 
     private static bool IsInteractiveElement(DependencyObject? current)
