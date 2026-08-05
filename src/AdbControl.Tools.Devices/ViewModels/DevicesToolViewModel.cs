@@ -309,6 +309,23 @@ public sealed class DevicesToolViewModel : ObservableObject
 
     private void OnSelectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // Выделение может измениться не из списка — например, при фоновой сверке
+        // устройств. Без этого строки оставались бы подсвеченными по-старому.
+        if (!_isRefreshingSelection)
+        {
+            _isRefreshingSelection = true;
+            try
+            {
+                SyncSelectedRows(_deviceInventory.SelectedDevices
+                    .Select(GetDeviceKey)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase));
+            }
+            finally
+            {
+                _isRefreshingSelection = false;
+            }
+        }
+
         OnPropertyChanged(nameof(SelectionSummary));
         OnPropertyChanged(nameof(EmptyStateMessage));
         NotifySelectionCommandsChanged();
@@ -336,7 +353,19 @@ public sealed class DevicesToolViewModel : ObservableObject
             return;
         }
 
-        _deviceInventory.ReplaceSelection(SelectedRows.Select(x => x.Device));
+        // Снимок обязателен: ReplaceSelection перебирает переданное уже после того,
+        // как обнулит своё выделение, а обратная сверка к этому моменту очистит строки.
+        var devices = SelectedRows.Select(row => row.Device).ToArray();
+
+        _isRefreshingSelection = true;
+        try
+        {
+            _deviceInventory.ReplaceSelection(devices);
+        }
+        finally
+        {
+            _isRefreshingSelection = false;
+        }
     }
 
     private static string FormatResult(string actionName, DeviceActionBatchResult result)

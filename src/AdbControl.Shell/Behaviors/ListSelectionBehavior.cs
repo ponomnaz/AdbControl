@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -43,6 +44,14 @@ public static class ListSelectionBehavior
             typeof(bool),
             typeof(ListSelectionBehavior),
             new PropertyMetadata(false));
+
+    /// <summary>Подписка на привязанную коллекцию — храним, чтобы было что отцепить.</summary>
+    private static readonly DependencyProperty BoundSelectionHandlerProperty =
+        DependencyProperty.RegisterAttached(
+            "BoundSelectionHandler",
+            typeof(NotifyCollectionChangedEventHandler),
+            typeof(ListSelectionBehavior),
+            new PropertyMetadata(null));
 
     private static readonly DependencyProperty MarqueeProperty =
         DependencyProperty.RegisterAttached(
@@ -103,6 +112,23 @@ public static class ListSelectionBehavior
         listBox.SelectionChanged -= OnListBoxSelectionChanged;
         listBox.SelectionChanged += OnListBoxSelectionChanged;
 
+        // Привязка работает в обе стороны: выделение может измениться и снаружи —
+        // например, когда его правит фоновая сверка устройств.
+        if (e.OldValue is INotifyCollectionChanged oldSource &&
+            listBox.GetValue(BoundSelectionHandlerProperty) is NotifyCollectionChangedEventHandler oldHandler)
+        {
+            oldSource.CollectionChanged -= oldHandler;
+            listBox.ClearValue(BoundSelectionHandlerProperty);
+        }
+
+        if (e.NewValue is INotifyCollectionChanged newSource)
+        {
+            void Handler(object? _, NotifyCollectionChangedEventArgs __) => ApplyBoundSelection(listBox);
+
+            newSource.CollectionChanged += Handler;
+            listBox.SetValue(BoundSelectionHandlerProperty, (NotifyCollectionChangedEventHandler)Handler);
+        }
+
         if (listBox.SelectionMode == SelectionMode.Single || !GetIsMarqueeEnabled(listBox))
         {
             return;
@@ -120,6 +146,50 @@ public static class ListSelectionBehavior
         // Переключение вкладки посреди протяжки: без этого рамка уедет вместе со списком.
         listBox.Unloaded -= OnListBoxUnloaded;
         listBox.Unloaded += OnListBoxUnloaded;
+    }
+
+    /// <summary>
+    /// Переносит выделение из привязанной коллекции в список. Правки точечные: полная
+    /// пересборка сбрасывала бы якорь Shift-выделения и мигала бы подсветкой.
+    /// </summary>
+    private static void ApplyBoundSelection(ListBox listBox)
+    {
+        if (GetIsUpdating(listBox))
+        {
+            return;
+        }
+
+        var source = GetSelectedItems(listBox);
+        if (source is null)
+        {
+            return;
+        }
+
+        SetIsUpdating(listBox, true);
+        try
+        {
+            for (var index = listBox.SelectedItems.Count - 1; index >= 0; index--)
+            {
+                var item = listBox.SelectedItems[index];
+
+                if (!source.Contains(item))
+                {
+                    listBox.SelectedItems.Remove(item);
+                }
+            }
+
+            foreach (var item in source)
+            {
+                if (!listBox.SelectedItems.Contains(item))
+                {
+                    listBox.SelectedItems.Add(item);
+                }
+            }
+        }
+        finally
+        {
+            SetIsUpdating(listBox, false);
+        }
     }
 
     private static void OnListBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
