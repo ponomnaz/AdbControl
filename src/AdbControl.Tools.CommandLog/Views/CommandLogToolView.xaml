@@ -3,11 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:behaviors="clr-namespace:AdbControl.Shell.Behaviors;assembly=AdbControl.Shell"
+             xmlns:views="clr-namespace:AdbControl.Tools.CommandLog.Views"
              mc:Ignorable="d"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True">
     <UserControl.Resources>
+        <views:DurationConverter x:Key="DurationConverter" />
+
         <Style x:Key="CommandLogListBoxStyle" TargetType="ListBox" BasedOn="{StaticResource WorkbenchListBoxStyle}">
             <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
             <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
@@ -91,10 +93,11 @@
                             Command="{Binding DeleteSelectedCommand}"
                             Content="Удалить выбранную"
                             Style="{DynamicResource SecondaryButtonStyle}" />
-                    <Button Command="{Binding ClearAllCommand}"
+                    <Button Command="{Binding ClearVisibleCommand}"
                             VerticalAlignment="Center"
-                            Content="Очистить всё"
-                            Style="{DynamicResource DangerButtonStyle}" />
+                            Content="Очистить видимое"
+                            Style="{DynamicResource DangerButtonStyle}"
+                            ToolTip="Стирает то, что показано: при выбранном телевизоре — только его команды" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -121,7 +124,7 @@
                              Margin="0,8,0,0"
                              ItemsSource="{Binding VisibleEntries}"
                              SelectionMode="Single"
-                             behaviors:ListSelectionBehavior.SelectedItems="{Binding SelectedEntries}"
+                             SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
                              Style="{StaticResource CommandLogListBoxStyle}"
                              ItemContainerStyle="{StaticResource CommandLogEntryListBoxItemStyle}">
                         <ListBox.InputBindings>
@@ -135,6 +138,7 @@
                                         <ColumnDefinition Width="92" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center"
                                                Style="{DynamicResource Text.CaptionStyle}"
@@ -146,9 +150,16 @@
                                         <TextBlock FontWeight="SemiBold"
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
-                                                   Text="{Binding CommandText}" />
+                                                   Text="{Binding CommandText}"
+                                                   ToolTip="{Binding CommandText}" />
                                     </StackPanel>
-                                    <Border Grid.Column="2"
+                                    <TextBlock Grid.Column="2"
+                                               Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
+                                               TextWrapping="NoWrap"
+                                               Style="{DynamicResource Text.CaptionStyle}"
+                                               Text="{Binding DurationMs, Converter={StaticResource DurationConverter}}" />
+                                    <Border Grid.Column="3"
                                             Margin="8,0,0,0"
                                             Padding="8,2"
                                             CornerRadius="8"
@@ -197,6 +208,9 @@
                         <TextBlock Margin="0,6,0,0"
                                    Style="{DynamicResource Text.CaptionStyle}"
                                    Text="{Binding SelectedExitCode}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{DynamicResource Text.CaptionStyle}"
+                                   Text="{Binding SelectedDuration}" />
                     </StackPanel>
 
                     <TextBox Grid.Row="1"

@@ -26,15 +26,14 @@ public sealed class CommandLogToolViewModel : ObservableObject
         _deviceAliases = deviceAliases;
         _commandTraceJournal.Entries.CollectionChanged += OnEntriesChanged;
         _deviceAliases.Changed += OnAliasesChanged;
-        SelectedEntries.CollectionChanged += OnSelectedEntriesChanged;
 
         DeleteSelectedCommand = new RelayCommand(
             () => _ = DeleteSelectedAsync(),
             () => CanDeleteSelected());
 
-        ClearAllCommand = new RelayCommand(
-            () => _ = ClearAllAsync(),
-            () => CanClearAll());
+        ClearVisibleCommand = new RelayCommand(
+            () => _ = ClearVisibleAsync(),
+            () => CanClearVisible());
 
         RebuildDeviceFilters();
         RebuildVisibleEntries();
@@ -44,11 +43,9 @@ public sealed class CommandLogToolViewModel : ObservableObject
 
     public ObservableCollection<CommandTraceEntry> VisibleEntries { get; } = [];
 
-    public ObservableCollection<CommandTraceEntry> SelectedEntries { get; } = [];
-
     public RelayCommand DeleteSelectedCommand { get; }
 
-    public RelayCommand ClearAllCommand { get; }
+    public RelayCommand ClearVisibleCommand { get; }
 
     public CommandLogDeviceFilterItem? SelectedDeviceFilter
     {
@@ -62,7 +59,6 @@ public sealed class CommandLogToolViewModel : ObservableObject
                 return;
             }
 
-            SelectedEntries.Clear();
             SelectedEntry = null;
             RebuildVisibleEntries();
             OnPropertyChanged(nameof(TotalSummary));
@@ -88,6 +84,8 @@ public sealed class CommandLogToolViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedExitCode));
             OnPropertyChanged(nameof(SelectedStdout));
             OnPropertyChanged(nameof(SelectedStderr));
+            OnPropertyChanged(nameof(SelectedDuration));
+            NotifyCommandStateChanged();
         }
     }
 
@@ -111,6 +109,20 @@ public sealed class CommandLogToolViewModel : ObservableObject
         ? string.Empty
         : $"Код выхода: {SelectedEntry.ExitCode}";
 
+    public string SelectedDuration => SelectedEntry?.DurationMs is { } duration
+        ? $"Заняла: {FormatDuration(duration)}"
+        : string.Empty;
+
+    /// <summary>У записей старше появления поля длительности нет — ставим прочерк.</summary>
+    public static string FormatDuration(int? durationMs)
+    {
+        return durationMs is not { } value
+            ? "—"
+            : value >= 1000
+                ? $"{value / 1000d:0.0} с"
+                : $"{value} мс";
+    }
+
     public string SelectedStdout => string.IsNullOrWhiteSpace(SelectedEntry?.Stdout)
         ? "Пусто"
         : SelectedEntry.Stdout;
@@ -121,12 +133,7 @@ public sealed class CommandLogToolViewModel : ObservableObject
 
     private async Task DeleteSelectedAsync()
     {
-        var selectedIds = SelectedEntries
-            .Select(entry => entry.Id)
-            .Distinct()
-            .ToArray();
-
-        if (selectedIds.Length == 0)
+        if (SelectedEntry is not { } entry)
         {
             return;
         }
@@ -137,8 +144,7 @@ public sealed class CommandLogToolViewModel : ObservableObject
             NotifyCommandStateChanged();
 
             SelectedEntry = null;
-            await _commandTraceJournal.RemoveEntriesAsync(selectedIds);
-            SelectedEntries.Clear();
+            await _commandTraceJournal.RemoveEntriesAsync([entry.Id]);
         }
         finally
         {
@@ -147,7 +153,8 @@ public sealed class CommandLogToolViewModel : ObservableObject
         }
     }
 
-    private async Task ClearAllAsync()
+    /// <summary>Стирает то, что показано: при выбранном фильтре — только его записи.</summary>
+    private async Task ClearVisibleAsync()
     {
         var visibleEntryIds = VisibleEntries
             .Select(entry => entry.Id)
@@ -164,7 +171,6 @@ public sealed class CommandLogToolViewModel : ObservableObject
             NotifyCommandStateChanged();
 
             SelectedEntry = null;
-            SelectedEntries.Clear();
             await _commandTraceJournal.RemoveEntriesAsync(visibleEntryIds);
         }
         finally
@@ -202,19 +208,12 @@ public sealed class CommandLogToolViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyStateMessage));
     }
 
-    private void OnSelectedEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        SelectedEntry = SelectedEntries.LastOrDefault();
-
-        NotifyCommandStateChanged();
-    }
-
     private bool CanDeleteSelected()
     {
-        return !_isMutating && SelectedEntries.Count > 0;
+        return !_isMutating && SelectedEntry is not null;
     }
 
-    private bool CanClearAll()
+    private bool CanClearVisible()
     {
         return !_isMutating && VisibleEntries.Count > 0;
     }
@@ -222,60 +221,118 @@ public sealed class CommandLogToolViewModel : ObservableObject
     private void NotifyCommandStateChanged()
     {
         DeleteSelectedCommand.NotifyCanExecuteChanged();
-        ClearAllCommand.NotifyCanExecuteChanged();
+        ClearVisibleCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Сводит список фильтров к нужному, не пересоздавая уцелевшие пункты: пересборка
+    /// закрывала раскрытый список под курсором и сбрасывала выбор при каждой команде.
+    /// </summary>
     private void RebuildDeviceFilters()
     {
-        var previouslySelectedKey = SelectedDeviceFilter?.Key ?? CommandLogDeviceFilterItem.AllKey;
-
-        var endpointItems = _commandTraceJournal.Entries
+        var endpoints = _commandTraceJournal.Entries
             .Select(entry => ExtractEndpoint(entry.CommandText))
             .Where(static endpoint => !string.IsNullOrWhiteSpace(endpoint))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(endpoint => CommandLogDeviceFilterItem.CreateDevice(endpoint!, BuildFilterDisplayText(endpoint!)))
-            .OrderBy(static item => item.DisplayText, StringComparer.CurrentCultureIgnoreCase)
+            .Select(endpoint => endpoint!)
+            .OrderBy(BuildFilterDisplayText, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
 
-        DeviceFilters.Clear();
-        DeviceFilters.Add(_allDevicesFilter);
+        var index = 1;
 
-        foreach (var item in endpointItems)
+        if (DeviceFilters.Count == 0)
         {
-            DeviceFilters.Add(item);
+            DeviceFilters.Add(_allDevicesFilter);
         }
 
-        var nextSelectedItem = DeviceFilters.FirstOrDefault(item =>
-            string.Equals(item.Key, previouslySelectedKey, StringComparison.Ordinal))
-            ?? _allDevicesFilter;
-
-        if (!ReferenceEquals(SelectedDeviceFilter, nextSelectedItem))
+        foreach (var endpoint in endpoints)
         {
-            SelectedDeviceFilter = nextSelectedItem;
-            return;
+            var existing = DeviceFilters.FirstOrDefault(item =>
+                string.Equals(item.Key, endpoint, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is not null)
+            {
+                // Псевдоним телевизора мог поменяться — правим подпись, а не объект.
+                existing.DisplayText = BuildFilterDisplayText(endpoint);
+
+                var current = DeviceFilters.IndexOf(existing);
+                if (current != index)
+                {
+                    DeviceFilters.Move(current, index);
+                }
+            }
+            else
+            {
+                DeviceFilters.Insert(index, CommandLogDeviceFilterItem.CreateDevice(endpoint, BuildFilterDisplayText(endpoint)));
+            }
+
+            index++;
         }
 
-        if (!DeviceFilters.Any(item =>
-                string.Equals(item.Key, previouslySelectedKey, StringComparison.Ordinal)))
+        while (DeviceFilters.Count > index)
         {
-            SelectedDeviceFilter = _allDevicesFilter;
+            var dropped = DeviceFilters[^1];
+            DeviceFilters.RemoveAt(DeviceFilters.Count - 1);
+
+            // Выбранный телевизор пропал из журнала — возвращаемся ко всем.
+            if (ReferenceEquals(SelectedDeviceFilter, dropped))
+            {
+                SelectedDeviceFilter = _allDevicesFilter;
+            }
         }
+
+        SelectedDeviceFilter ??= _allDevicesFilter;
     }
 
+    /// <summary>
+    /// Сводит видимые записи к отобранным. Пересборка сбрасывала выделение и прокрутку,
+    /// а журнал пополняется постоянно — читать выбранную запись было невозможно.
+    /// </summary>
     private void RebuildVisibleEntries()
     {
         var selectedEndpoint = SelectedDeviceFilter?.Endpoint;
 
-        var visibleEntries = _commandTraceJournal.Entries
+        var desired = _commandTraceJournal.Entries
             .Where(entry => selectedEndpoint is null ||
                             string.Equals(ExtractEndpoint(entry.CommandText), selectedEndpoint, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        VisibleEntries.Clear();
-        foreach (var entry in visibleEntries)
+        for (var index = 0; index < desired.Length; index++)
         {
-            VisibleEntries.Add(entry);
+            if (index < VisibleEntries.Count && ReferenceEquals(VisibleEntries[index], desired[index]))
+            {
+                continue;
+            }
+
+            var current = IndexOfSame(desired[index], index);
+
+            if (current >= 0)
+            {
+                VisibleEntries.Move(current, index);
+            }
+            else
+            {
+                VisibleEntries.Insert(index, desired[index]);
+            }
         }
+
+        while (VisibleEntries.Count > desired.Length)
+        {
+            VisibleEntries.RemoveAt(VisibleEntries.Count - 1);
+        }
+    }
+
+    private int IndexOfSame(CommandTraceEntry entry, int from)
+    {
+        for (var index = from; index < VisibleEntries.Count; index++)
+        {
+            if (ReferenceEquals(VisibleEntries[index], entry))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private string BuildFilterDisplayText(string endpoint)
@@ -310,9 +367,32 @@ public sealed class CommandLogToolViewModel : ObservableObject
     }
 }
 
-public sealed record CommandLogDeviceFilterItem(string Key, string? Endpoint, string DisplayText)
+/// <summary>
+/// Пункт фильтра. Не запись: подпись меняется при переименовании телевизора, а сам
+/// объект обязан остаться тем же — иначе выпадающий список теряет выбранное.
+/// </summary>
+public sealed class CommandLogDeviceFilterItem : ObservableObject
 {
     public const string AllKey = "__all__";
+
+    private string _displayText;
+
+    private CommandLogDeviceFilterItem(string key, string? endpoint, string displayText)
+    {
+        Key = key;
+        Endpoint = endpoint;
+        _displayText = displayText;
+    }
+
+    public string Key { get; }
+
+    public string? Endpoint { get; }
+
+    public string DisplayText
+    {
+        get => _displayText;
+        set => SetProperty(ref _displayText, value);
+    }
 
     public bool IsAll => Endpoint is null;
 

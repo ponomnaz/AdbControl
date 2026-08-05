@@ -116,10 +116,11 @@ public sealed class AdbRemoteControlService : IRemoteControlService
                 Guid.NewGuid(),
                 DateTimeOffset.Now,
                 $"[one-shot] -s {targetId} shell {command}",
-                $"{stopwatch.Elapsed.TotalMilliseconds:F0} ms (новый процесс adb, сессия недоступна)\n{result.Stdout}",
+                $"новый процесс adb, сессия недоступна\n{result.Stdout}",
                 result.Stderr,
                 result.ExitCode,
-                !result.Started || result.ExitCode != 0),
+                !result.Started || result.ExitCode != 0,
+                (int)stopwatch.ElapsedMilliseconds),
             cancellationToken);
 
         return result.Started && result.ExitCode == 0;
@@ -219,10 +220,11 @@ public sealed class AdbRemoteControlService : IRemoteControlService
                     Guid.NewGuid(),
                     DateTimeOffset.Now,
                     $"[session] input keyevent {string.Join(' ', keys)}",
-                    $"{elapsed.TotalMilliseconds:F0} ms на устройстве, нажатий в пачке: {keys.Length}",
+                    $"нажатий в пачке: {keys.Length}",
                     string.Empty,
                     0,
-                    false),
+                    false,
+                    (int)elapsed.TotalMilliseconds),
                 CancellationToken.None);
         }
         catch

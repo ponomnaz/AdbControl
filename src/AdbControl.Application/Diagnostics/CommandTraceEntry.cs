@@ -7,4 +7,9 @@ public sealed record CommandTraceEntry(
     string Stdout,
     string Stderr,
     int ExitCode,
-    bool IsError);
+    bool IsError,
+    /// <summary>
+    /// Сколько заняла команда. Необязательное: записи, сделанные до появления поля,
+    /// читаются из файла без него, и подделывать им длительность нечем.
+    /// </summary>
+    int? DurationMs = null);

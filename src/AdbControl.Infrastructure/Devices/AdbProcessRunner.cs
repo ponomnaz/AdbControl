@@ -28,6 +28,8 @@ public sealed class AdbProcessRunner
             ? "adb"
             : $"adb {recordedArguments}";
 
+        var stopwatch = Stopwatch.StartNew();
+
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -55,7 +57,8 @@ public sealed class AdbProcessRunner
                     string.Empty,
                     "adb.exe не найден. Добавь platform-tools в PATH.",
                     -1,
-                    true),
+                    true,
+                    (int)stopwatch.ElapsedMilliseconds),
                 cancellationToken);
 
             return AdbProcessResult.NotStarted;
@@ -98,7 +101,8 @@ public sealed class AdbProcessRunner
                         stdout,
                         stderr,
                         process.ExitCode,
-                        isError),
+                        isError,
+                        (int)stopwatch.ElapsedMilliseconds),
                     cancellationToken);
             }
 
@@ -116,7 +120,8 @@ public sealed class AdbProcessRunner
                         string.Empty,
                         "Операция отменена.",
                         CanceledExitCode,
-                        true),
+                        true,
+                        (int)stopwatch.ElapsedMilliseconds),
                     CancellationToken.None);
             }
 

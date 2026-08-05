@@ -59,6 +59,13 @@ public sealed class CommandTraceJournal : ObservableObject
         UnreadErrorCount = 0;
     }
 
+    /// <summary>
+    /// Вызывать только из потока окна: коллекция привязана к списку, а менять привязанную
+    /// коллекцию из чужого потока WPF не даёт. Сейчас это выполняется само — по пути от
+    /// запуска команды до записи нигде нет ConfigureAwait(false), и продолжения
+    /// возвращаются туда же, откуда всё началось. Появится хоть один — журнал начнёт
+    /// падать в неочевидном месте.
+    /// </summary>
     public async Task RecordAsync(CommandTraceEntry entry, CancellationToken cancellationToken = default)
     {
         Entries.Insert(0, entry);

@@ -127,9 +127,10 @@ public sealed class AdbScreenshotService : IDeviceScreenshotService
 
             await RecordAsync(
                 arguments,
-                $"{stopwatch.Elapsed.TotalMilliseconds:F0} ms, {payload.Length - pngStart} байт{skipped}\n{filePath}",
+                $"{payload.Length - pngStart} байт{skipped}\n{filePath}",
                 false,
-                cancellationToken);
+                cancellationToken,
+                (int)stopwatch.ElapsedMilliseconds);
 
             return filePath;
         }
@@ -180,7 +181,12 @@ public sealed class AdbScreenshotService : IDeviceScreenshotService
         return string.IsNullOrWhiteSpace(cleaned) ? "device" : cleaned;
     }
 
-    private async Task RecordAsync(string arguments, string message, bool isError, CancellationToken cancellationToken)
+    private async Task RecordAsync(
+        string arguments,
+        string message,
+        bool isError,
+        CancellationToken cancellationToken,
+        int? durationMs = null)
     {
         try
         {
@@ -192,7 +198,8 @@ public sealed class AdbScreenshotService : IDeviceScreenshotService
                     isError ? string.Empty : message,
                     isError ? message : string.Empty,
                     isError ? 1 : 0,
-                    isError),
+                    isError,
+                    durationMs),
                 cancellationToken);
         }
         catch
