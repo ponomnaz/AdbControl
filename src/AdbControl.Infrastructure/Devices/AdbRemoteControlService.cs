@@ -36,6 +36,102 @@ public sealed class AdbRemoteControlService : IRemoteControlService
         _commandTraceJournal = commandTraceJournal;
     }
 
+    /// <summary>
+    /// Разбирает вывод <c>wm size</c> и <c>wm density</c>. Обе команды печатают строку
+    /// «Physical …», а «Override …» появляется только когда значение переопределено.
+    /// </summary>
+    public async Task<DeviceDisplayState?> ReadDisplayAsync(string targetId, CancellationToken cancellationToken = default)
+    {
+        var size = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell wm size",
+            cancellationToken,
+            recordInJournal: false);
+
+        // Ненулевой код возврата — устройства нет или оно недоступно. Возвращать
+        // «состояние» из пустых значений нельзя: вкладка примет это за прочитанный экран.
+        if (!size.Started || size.ExitCode != 0)
+        {
+            return null;
+        }
+
+        var density = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell wm density",
+            cancellationToken,
+            recordInJournal: false);
+
+        return new DeviceDisplayState(
+            ExtractSize(size.Stdout, "Physical size"),
+            ExtractSize(size.Stdout, "Override size"),
+            ExtractDensity(density.Stdout, "Physical density"),
+            ExtractDensity(density.Stdout, "Override density"));
+    }
+
+    public async Task<bool> ApplySizeAsync(string targetId, string? size, CancellationToken cancellationToken = default)
+    {
+        var argument = string.IsNullOrWhiteSpace(size) ? "reset" : size.Trim();
+
+        var result = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell wm size {argument}",
+            cancellationToken);
+
+        return result.Started && result.ExitCode == 0;
+    }
+
+    public async Task<bool> ApplyDensityAsync(string targetId, int? density, CancellationToken cancellationToken = default)
+    {
+        var argument = density is { } value ? value.ToString() : "reset";
+
+        var result = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell wm density {argument}",
+            cancellationToken);
+
+        return result.Started && result.ExitCode == 0;
+    }
+
+    private static string? ExtractSize(string output, string label)
+    {
+        var value = ExtractLabelled(output, label);
+
+        // Ожидаем «1920x1080»; всё остальное считаем нечитаемым и не показываем.
+        return value is not null && value.Contains('x', StringComparison.OrdinalIgnoreCase)
+            ? value
+            : null;
+    }
+
+    private static int? ExtractDensity(string output, string label)
+    {
+        return int.TryParse(ExtractLabelled(output, label), out var value) ? value : null;
+    }
+
+    private static string? ExtractLabelled(string output, string label)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        foreach (var line in output.Split('\n'))
+        {
+            var trimmed = line.Trim();
+
+            if (!trimmed.StartsWith(label, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var separator = trimmed.IndexOf(':');
+            if (separator < 0)
+            {
+                continue;
+            }
+
+            var value = trimmed[(separator + 1)..].Trim();
+            return value.Length == 0 ? null : value;
+        }
+
+        return null;
+    }
+
     public Task StartSessionAsync(string targetId, CancellationToken cancellationToken = default)
     {
         lock (_sessionLock)

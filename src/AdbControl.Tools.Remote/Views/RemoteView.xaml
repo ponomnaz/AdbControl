@@ -43,33 +43,64 @@
 
         <!-- Header -->
         <Border Grid.Row="0" Style="{DynamicResource PanelSurfaceStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel>
-                    <TextBlock Style="{DynamicResource Text.PageTitleStyle}" Text="Пульт" />
-                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
-                        <TextBlock Style="{DynamicResource Text.CaptionStyle}"
+            <!-- Переносимая компоновка: в колонке Auto панель управления мерялась бы
+                 бесконечной шириной и выдавливала заголовок со сводкой в ноль. -->
+            <WrapPanel>
+                <StackPanel MinWidth="200"
+                            Margin="0,0,16,8">
+                    <TextBlock Style="{DynamicResource Text.PageTitleStyle}"
+                               TextTrimming="CharacterEllipsis"
+                               Text="Пульт" />
+                    <WrapPanel Margin="0,8,0,0">
+                        <TextBlock Margin="0,0,12,0"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   Style="{DynamicResource Text.CaptionStyle}"
                                    Text="{Binding DeviceSummary}" />
-                        <TextBlock Margin="12,0,0,0"
+                        <TextBlock Margin="0,0,12,0"
+                                   MaxWidth="320"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
                                    Style="{DynamicResource Text.BodyMutedStyle}"
-                                   Text="{Binding StatusText}" />
-                    </StackPanel>
+                                   Text="{Binding StatusText}"
+                                   ToolTip="{Binding StatusText}" />
+                        <TextBlock MaxWidth="320"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   Style="{DynamicResource Text.BodyMutedStyle}"
+                                   Text="{Binding DisplayStatus}"
+                                   ToolTip="{Binding DisplayStatus}" />
+                    </WrapPanel>
                 </StackPanel>
 
-                <WrapPanel Grid.Column="1"
-                           Margin="16,0,0,0"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Bottom">
+                <WrapPanel VerticalAlignment="Bottom">
                     <ComboBox Width="220"
                               Margin="0,0,8,8"
                               Style="{DynamicResource CompactComboBoxInputStyle}"
                               ItemsSource="{Binding ConnectedDevices}"
                               SelectedItem="{Binding SelectedDevice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               DisplayMemberPath="DisplayText" />
+
+                    <!-- Выбор применяется к телевизору сразу: отдельной кнопки нет намеренно.
+                         Пункт сброса несёт физическое значение, поэтому подписи не нужны. -->
+                    <ComboBox Width="200"
+                              Margin="0,0,8,8"
+                              Style="{DynamicResource CompactComboBoxInputStyle}"
+                              IsEnabled="{Binding IsDisplayControlEnabled}"
+                              ItemsSource="{Binding SizeOptions}"
+                              SelectedItem="{Binding SelectedSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              DisplayMemberPath="DisplayText"
+                              ToolTip="Разрешение экрана. Применяется сразу, интерфейс телевизора перерисуется." />
+
+                    <ComboBox Width="190"
+                              Margin="0,0,8,8"
+                              Style="{DynamicResource CompactComboBoxInputStyle}"
+                              IsEnabled="{Binding IsDisplayControlEnabled}"
+                              ItemsSource="{Binding DensityOptions}"
+                              SelectedItem="{Binding SelectedDensity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              DisplayMemberPath="DisplayText"
+                              ToolTip="Плотность экрана в dpi. Чем меньше, тем мельче интерфейс и больше влезает." />
+
                     <Button Margin="0,0,8,8"
                             Command="{Binding StartMirroringCommand}"
                             Content="Трансляция"
@@ -79,7 +110,7 @@
                             Content="Стоп"
                             Style="{DynamicResource DangerButtonStyle}" />
                 </WrapPanel>
-            </Grid>
+            </WrapPanel>
         </Border>
 
         <!-- Content: screen + remote -->
