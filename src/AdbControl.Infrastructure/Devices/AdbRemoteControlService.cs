@@ -22,6 +22,10 @@ public sealed class AdbRemoteControlService : IRemoteControlService
     private readonly AdbProcessRunner _adbProcessRunner;
     private readonly CommandTraceJournal _commandTraceJournal;
     private readonly object _sessionLock = new();
+    private readonly object _fastInputLock = new();
+
+    /// <summary>Найденное устройство ввода для цели. Null во втором поле — путь недоступен.</summary>
+    private (string TargetId, FastInputDevice? Device)? _fastInput;
     private readonly List<int> _pendingKeys = [];
     private Process? _sessionProcess;
     private string? _sessionTargetId;
@@ -190,8 +194,212 @@ public sealed class AdbRemoteControlService : IRemoteControlService
         }
     }
 
+    // ── быстрый путь: запись прямо в устройство ввода ───────────────────────
+
+    /// <summary>
+    /// Обходит <c>input keyevent</c>, который поднимает виртуальную машину Java на каждый
+    /// вызов (замерено на телевизоре: 1036 мс против 214 мс). Пишем событие клавиши прямо
+    /// в <c>/dev/input</c>: там его подхватывает тот же обработчик, что и настоящий пульт.
+    ///
+    /// Путь доступен не везде — нужны права на устройство ввода. Поэтому он проверяется
+    /// на живом устройстве, и при неудаче всё возвращается к обычному способу.
+    /// </summary>
+    private async Task<bool> TrySendFastAsync(string targetId, int keyCode, CancellationToken cancellationToken)
+    {
+        if (!LinuxInputKeyMap.TryGetLinuxCode(keyCode, out var linuxCode))
+        {
+            return false;
+        }
+
+        var fastInput = await GetFastInputAsync(targetId, cancellationToken);
+
+        if (fastInput is null || !fastInput.Codes.Contains(linuxCode))
+        {
+            return false;
+        }
+
+        var device = fastInput.DevicePath;
+        var command =
+            $"sendevent {device} 1 {linuxCode} 1;sendevent {device} 0 0 0;" +
+            $"sendevent {device} 1 {linuxCode} 0;sendevent {device} 0 0 0";
+
+        // Открытая сессия — это уже запущенная оболочка: команде остаётся только доехать.
+        lock (_sessionLock)
+        {
+            if (_sessionProcess is { HasExited: false } &&
+                string.Equals(_sessionTargetId, targetId, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    _sessionProcess.StandardInput.WriteLine(command);
+                    _sessionProcess.StandardInput.Flush();
+                    return true;
+                }
+                catch (Exception)
+                {
+                    // Сессия отвалилась — уходим на разовый вызов.
+                }
+            }
+        }
+
+        var result = await _adbProcessRunner.RunAsync(
+            $"-s {targetId} shell {command}",
+            cancellationToken,
+            recordInJournal: false);
+
+        return result.Started && result.ExitCode == 0;
+    }
+
+    private async Task<FastInputDevice?> GetFastInputAsync(string targetId, CancellationToken cancellationToken)
+    {
+        lock (_fastInputLock)
+        {
+            if (_fastInput is { } known && string.Equals(known.TargetId, targetId, StringComparison.OrdinalIgnoreCase))
+            {
+                return known.Device;
+            }
+        }
+
+        var device = await ProbeFastInputAsync(targetId, cancellationToken);
+
+        lock (_fastInputLock)
+        {
+            _fastInput = (targetId, device);
+        }
+
+        return device;
+    }
+
+    /// <summary>
+    /// Ищет устройство ввода, объявляющее клавиши пульта, и убеждается, что в него можно
+    /// писать. Проверка — пустая синхронизация: она ничего не нажимает, но упрётся в отказ,
+    /// если прав нет.
+    /// </summary>
+    private async Task<FastInputDevice?> ProbeFastInputAsync(string targetId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var listing = await _adbProcessRunner.RunAsync(
+                $"-s {targetId} shell getevent -p",
+                cancellationToken,
+                recordInJournal: false);
+
+            if (!listing.Started)
+            {
+                return null;
+            }
+
+            foreach (var candidate in ParseInputDevices(listing.Stdout)
+                         .Where(device => LinuxInputKeyMap.RequiredCodes.All(device.Codes.Contains))
+                         .OrderByDescending(device => device.Codes.Count))
+            {
+                var check = await _adbProcessRunner.RunAsync(
+                    $"-s {targetId} shell sendevent {candidate.DevicePath} 0 0 0",
+                    cancellationToken,
+                    recordInJournal: false);
+
+                if (check.Started && check.ExitCode == 0 && string.IsNullOrWhiteSpace(check.Stderr))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Разбирает вывод <c>getevent -p</c>. Список кодов клавиш переносится на несколько
+    /// строк, поэтому собираем всё до следующего раздела, а не только первую строку.
+    /// </summary>
+    private static List<FastInputDevice> ParseInputDevices(string listing)
+    {
+        var devices = new List<FastInputDevice>();
+
+        if (string.IsNullOrWhiteSpace(listing))
+        {
+            return devices;
+        }
+
+        string? path = null;
+        HashSet<int>? codes = null;
+        var insideKeySection = false;
+
+        foreach (var rawLine in listing.Split('\n'))
+        {
+            var line = rawLine.TrimEnd();
+            var trimmed = line.Trim();
+
+            if (trimmed.StartsWith("add device", StringComparison.OrdinalIgnoreCase))
+            {
+                Flush();
+
+                var separator = trimmed.IndexOf(':');
+                path = separator >= 0 ? trimmed[(separator + 1)..].Trim() : null;
+                codes = [];
+                insideKeySection = false;
+                continue;
+            }
+
+            if (trimmed.StartsWith("KEY (", StringComparison.OrdinalIgnoreCase))
+            {
+                insideKeySection = true;
+                CollectCodes(trimmed[(trimmed.IndexOf(':') + 1)..]);
+                continue;
+            }
+
+            if (insideKeySection)
+            {
+                // Продолжение списка — только шестнадцатеричные значения и пробелы.
+                if (trimmed.Length > 0 && trimmed.All(character => Uri.IsHexDigit(character) || character == ' '))
+                {
+                    CollectCodes(trimmed);
+                    continue;
+                }
+
+                insideKeySection = false;
+            }
+        }
+
+        Flush();
+        return devices;
+
+        void CollectCodes(string text)
+        {
+            foreach (var token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out var code))
+                {
+                    codes?.Add(code);
+                }
+            }
+        }
+
+        void Flush()
+        {
+            if (path is { Length: > 0 } && codes is { Count: > 0 })
+            {
+                devices.Add(new FastInputDevice(path, codes));
+            }
+
+            path = null;
+            codes = null;
+        }
+    }
+
+    private sealed record FastInputDevice(string DevicePath, HashSet<int> Codes);
+
     public async Task<bool> SendKeyEventAsync(string targetId, int keyCode, CancellationToken cancellationToken = default)
     {
+        if (await TrySendFastAsync(targetId, keyCode, cancellationToken))
+        {
+            return true;
+        }
+
         if (TryEnqueueForSession(targetId, keyCode))
         {
             return true;

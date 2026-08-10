@@ -18,4 +18,15 @@ public static class RemoteKeyCode
     public const int MediaRewind = 89;
     public const int MediaFastForward = 90;
     public const int MediaStop = 86;
+
+    public const int Digit0 = 7;
+    public const int Digit1 = 8;
+    public const int Digit2 = 9;
+    public const int Digit3 = 10;
+    public const int Digit4 = 11;
+    public const int Digit5 = 12;
+    public const int Digit6 = 13;
+    public const int Digit7 = 14;
+    public const int Digit8 = 15;
+    public const int Digit9 = 16;
 }

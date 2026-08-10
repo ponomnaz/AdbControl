@@ -3,6 +3,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using AdbControl.Application.Remote;
+using AdbControl.Tools.Remote.ViewModels;
 
 namespace AdbControl.Tools.Remote.Views;
 

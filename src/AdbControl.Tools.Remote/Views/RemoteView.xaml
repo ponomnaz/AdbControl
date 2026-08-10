@@ -15,22 +15,42 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <views:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis" />
 
+        <!--
+            ClickMode=Press: нажатие уходит сразу по нажатию, а не по отпусканию. Иначе
+            удержание давало бы лишнее нажатие в конце — поверх уже отправленных повторов.
+        -->
         <Style x:Key="RemoteButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
             <Setter Property="Width" Value="48" />
             <Setter Property="Height" Value="40" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="FontSize" Value="14" />
+            <Setter Property="ClickMode" Value="Press" />
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnRemoteButtonPressed" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnRemoteButtonReleased" />
+            <EventSetter Event="MouseLeave" Handler="OnRemoteButtonReleased" />
         </Style>
         <Style x:Key="RemoteDpadButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
             <Setter Property="Width" Value="48" />
             <Setter Property="Height" Value="48" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="FontSize" Value="16" />
+            <Setter Property="ClickMode" Value="Press" />
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnRemoteButtonPressed" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnRemoteButtonReleased" />
+            <EventSetter Event="MouseLeave" Handler="OnRemoteButtonReleased" />
         </Style>
         <Style x:Key="RemoteOkButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
             <Setter Property="Width" Value="52" />
             <Setter Property="Height" Value="52" />
             <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="ClickMode" Value="Press" />
+        </Style>
+
+        <!-- Цифры: те же размеры, но подпись мельче и обычным начертанием. -->
+        <Style x:Key="RemoteDigitButtonStyle" TargetType="Button" BasedOn="{StaticResource RemoteButtonStyle}">
+            <Setter Property="Width" Value="48" />
+            <Setter Property="Height" Value="34" />
             <Setter Property="FontSize" Value="13" />
         </Style>
     </UserControl.Resources>
@@ -245,6 +265,45 @@
                                     Command="{Binding SendKeyCommand}"
                                     CommandParameter="{x:Static remote:RemoteKeyCode.Menu}" />
                         </StackPanel>
+
+                        <Separator Margin="0,0,0,10" />
+
+                        <!-- Цифры: три в ряд, ноль под последней тройкой -->
+                        <UniformGrid Columns="3"
+                                     HorizontalAlignment="Center"
+                                     Margin="0,0,0,10">
+                            <Button Content="1" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit1}" />
+                            <Button Content="2" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit2}" />
+                            <Button Content="3" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,0,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit3}" />
+                            <Button Content="4" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit4}" />
+                            <Button Content="5" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit5}" />
+                            <Button Content="6" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,0,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit6}" />
+                            <Button Content="7" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit7}" />
+                            <Button Content="8" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit8}" />
+                            <Button Content="9" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,0,6"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit9}" />
+                            <Button Style="{StaticResource RemoteDigitButtonStyle}" Visibility="Hidden" />
+                            <Button Content="0" Style="{StaticResource RemoteDigitButtonStyle}" Margin="0,0,6,0"
+                                    Command="{Binding SendKeyCommand}"
+                                    CommandParameter="{x:Static remote:RemoteKeyCode.Digit0}" />
+                        </UniformGrid>
 
                         <Separator Margin="0,0,0,10" />
 

@@ -2,13 +2,23 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Threading;
 using AdbControl.Tools.Remote.ViewModels;
 
 namespace AdbControl.Tools.Remote.Views;
 
 public partial class RemoteView : UserControl
 {
+    /// <summary>Сколько держать кнопку, прежде чем нажатия пойдут повторами.</summary>
+    private static readonly TimeSpan RepeatDelay = TimeSpan.FromMilliseconds(450);
+
+    /// <summary>Шаг повтора. Реже, чем у клавиатуры: каждое нажатие — команда телевизору.</summary>
+    private static readonly TimeSpan RepeatInterval = TimeSpan.FromMilliseconds(160);
+
+    private readonly DispatcherTimer _repeatTimer;
     private RemoteViewModel? _viewModel;
+    private Button? _heldButton;
 
     public RemoteView()
     {
@@ -16,6 +26,52 @@ public partial class RemoteView : UserControl
         DataContextChanged += OnDataContextChanged;
         ScrcpyHost.WindowAttached += OnWindowAttached;
         Unloaded += OnUnloaded;
+
+        _repeatTimer = new DispatcherTimer { Interval = RepeatDelay };
+        _repeatTimer.Tick += OnRepeatTick;
+    }
+
+    // ── удержание кнопки ─────────────────────────────────────────────────
+
+    private void OnRemoteButtonPressed(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Button button)
+        {
+            return;
+        }
+
+        // Само нажатие уже отправит сам Button: у него ClickMode=Press.
+        _heldButton = button;
+        _repeatTimer.Interval = RepeatDelay;
+        _repeatTimer.Start();
+    }
+
+    private void OnRemoteButtonReleased(object sender, MouseEventArgs e)
+    {
+        StopRepeat();
+    }
+
+    private void OnRepeatTick(object? sender, EventArgs e)
+    {
+        // Кнопку могли отпустить за пределами окна — событие отпускания тогда не придёт.
+        if (_heldButton is null || Mouse.LeftButton != MouseButtonState.Pressed)
+        {
+            StopRepeat();
+            return;
+        }
+
+        _repeatTimer.Interval = RepeatInterval;
+
+        if (_heldButton.Command is { } command && command.CanExecute(_heldButton.CommandParameter))
+        {
+            command.Execute(_heldButton.CommandParameter);
+        }
+    }
+
+    private void StopRepeat()
+    {
+        _repeatTimer.Stop();
+        _heldButton = null;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -80,6 +136,8 @@ public partial class RemoteView : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        StopRepeat();
+
         // Fallback in case DataContextChanged didn't fire first.
         StopMirroring(_viewModel);
     }
